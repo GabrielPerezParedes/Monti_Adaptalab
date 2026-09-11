@@ -1,0 +1,19 @@
+{
+  "name": "monti",
+  "private": true,
+  "type": "module",
+  "version": "1.1.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
+    "typecheck": "npm run typecheck --workspace apps/web",
+    "test:bridge": "node --test integrations/phet/tests/*.test.mjs",
+    "test:voice": "node --experimental-strip-types --test apps/web/tests/voice.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

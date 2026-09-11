@@ -1,0 +1,93 @@
+{
+  "description": "Public sources for the MONTI adapted-from-phet build. Do not replace pins without rebuilding and validating the adapter.",
+  "repositories": {
+    "assert": {
+      "url": "https://github.com/phetsims/assert.git",
+      "sha": "51cb1f03d29ea7ba229d27533e544e789d5a2a31"
+    },
+    "axon": {
+      "url": "https://github.com/phetsims/axon.git",
+      "sha": "8d158fa9163dcb4bc1635bb9cce60bcea2a931c1"
+    },
+    "babel": {
+      "url": "https://github.com/phetsims/babel.git",
+      "sha": "834a1828594196a6f185fb0023d32da15cb64092"
+    },
+    "brand": {
+      "url": "https://github.com/phetsims/brand.git",
+      "sha": "3748f9717bb6c13642cccd8c76894472f81f721d"
+    },
+    "chipper": {
+      "url": "https://github.com/phetsims/chipper.git",
+      "sha": "5fe611969b5b60b1f58dc5b4d83cb79d4d001c69"
+    },
+    "dot": {
+      "url": "https://github.com/phetsims/dot.git",
+      "sha": "a425976d5f68b74dd99c3cdb5c5388fb88d69282"
+    },
+    "joist": {
+      "url": "https://github.com/phetsims/joist.git",
+      "sha": "b5e2959d6c74684bd6caf0b4ef09681414ede697"
+    },
+    "kite": {
+      "url": "https://github.com/phetsims/kite.git",
+      "sha": "b7686ed3ecbae95ae93bdbe16b8eec7141e2a013"
+    },
+    "perennial-alias": {
+      "url": "https://github.com/phetsims/perennial.git",
+      "sha": "6d2af9e6a44c18f9589d56b07076db731394f176"
+    },
+    "phet-core": {
+      "url": "https://github.com/phetsims/phet-core.git",
+      "sha": "32a5205cb8820e4fb8cee3507d65475cab4345f4"
+    },
+    "phetcommon": {
+      "url": "https://github.com/phetsims/phetcommon.git",
+      "sha": "92defd570c6cbfe33eb8fb29946d7a12086e8102"
+    },
+    "phetmarks": {
+      "url": "https://github.com/phetsims/phetmarks.git",
+      "sha": "d81ab55544421e540366ae32579e3d8bba8ee261"
+    },
+    "projectile-motion": {
+      "url": "https://github.com/phetsims/projectile-motion.git",
+      "sha": "72794fc16be76870f7431b31388cbb634107753c"
+    },
+    "query-string-machine": {
+      "url": "https://github.com/phetsims/query-string-machine.git",
+      "sha": "26dc5594df5bcdcb115ea78143e5d969869f1398"
+    },
+    "scenery": {
+      "url": "https://github.com/phetsims/scenery.git",
+      "sha": "dc92335e32692bdf456d5325cee11a0adb134254"
+    },
+    "scenery-phet": {
+      "url": "https://github.com/phetsims/scenery-phet.git",
+      "sha": "13a8f59bbd63c1d8aed1cfd9e9ddc73080117ec7"
+    },
+    "sherpa": {
+      "url": "https://github.com/phetsims/sherpa.git",
+      "sha": "4e16850c22c1666a029739137df9c07c64a9b448"
+    },
+    "sun": {
+      "url": "https://github.com/phetsims/sun.git",
+      "sha": "28067b9eaba4778ea98fcaaa7fd69aaf1838a835"
+    },
+    "tambo": {
+      "url": "https://github.com/phetsims/tambo.git",
+      "sha": "dfc44bd1de84a52c0c08fb5c768f59cc176e6b63"
+    },
+    "tandem": {
+      "url": "https://github.com/phetsims/tandem.git",
+      "sha": "ca94f06207b6893c21d557f8caef50eca8b15691"
+    },
+    "twixt": {
+      "url": "https://github.com/phetsims/twixt.git",
+      "sha": "8a83e0017b1388c7fd36419ed78200693d3bc944"
+    },
+    "utterance-queue": {
+      "url": "https://github.com/phetsims/utterance-queue.git",
+      "sha": "a1043edf202165df9cf93da6a24ad56b9ca578d6"
+    }
+  }
+}
