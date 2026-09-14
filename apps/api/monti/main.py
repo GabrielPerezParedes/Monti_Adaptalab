@@ -1,25 +1,43 @@
-"""Local teaching prototype. Production authentication is a separate milestone."""
+"""Local teaching prototype with optional school authentication."""
 from hashlib import sha256
 from math import isclose
 from secrets import token_urlsafe, compare_digest
 from uuid import uuid4
 import os
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from .database import Attempt, Lab, RecordedEvent, Run, connect, now
+from .database import Attempt, Enrollment, Lab, RecordedEvent, Run, User, connect, now
 from .generation import generate, validate_launch
 from .physics import efficiency, solve
 from .schemas import EventBatch, Explanation, JoinRequest, LabRequest, LaunchState, Submission, TeacherReview
+from .auth.deps import (
+    bearer_token,
+    require_teacher_subject,
+    school_auth_enabled,
+    teacher_subject_ids,
+)
+from .auth.router import create_auth_router
+from .auth.sessions import resolve_session
+
 
 def create_app(database_url=None):
     sessions = connect(database_url)
-    app = FastAPI(title='MONTI · integración local', version='1.1.0', description='Datos de prueba. Autenticación escolar y RAG pendientes.')
-    app.add_middleware(CORSMiddleware,
+    app = FastAPI(
+        title='MONTI · integración local',
+        version='1.1.0',
+        description='Laboratorio local. Autenticación escolar opcional vía MONTI_FEATURE_SCHOOL_AUTH.',
+    )
+    app.state.session_factory = sessions
+    app.add_middleware(
+        CORSMiddleware,
         allow_origins=os.getenv('MONTI_CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(','),
-        allow_methods=['GET', 'POST'], allow_headers=['Content-Type', 'X-Attempt-Token', 'X-Teacher-Key'])
+        allow_methods=['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+        allow_headers=['Content-Type', 'Authorization', 'X-Attempt-Token', 'X-Teacher-Key'],
+    )
+    app.include_router(create_auth_router())
 
     def db():
         with sessions() as session:
@@ -29,10 +47,24 @@ def create_app(database_url=None):
                 session.rollback()
                 raise HTTPException(409, 'Escritura concurrente: reintenta la misma solicitud.') from e
 
-    def teacher(x_teacher_key: str = Header(default='')):
+    def teacher_user(
+        request: Request,
+        session=Depends(db),
+        authorization: str | None = Header(default=None),
+        x_teacher_key: str = Header(default=''),
+    ) -> User | None:
+        if school_auth_enabled():
+            token = bearer_token(authorization)
+            if not token:
+                raise HTTPException(401, 'Debes iniciar sesión.')
+            user = resolve_session(session, token)
+            if not user or user.role not in {'admin', 'teacher'}:
+                raise HTTPException(403, 'Se requiere rol docente o administrador.')
+            return user
         expected = os.getenv('MONTI_DEV_TEACHER_KEY', 'monti-local-teacher')
         if not compare_digest(x_teacher_key, expected):
             raise HTTPException(403, 'Se requiere la clave docente de desarrollo.')
+        return None
 
     def get_lab(session, code):
         lab = session.get(Lab, code)
@@ -57,7 +89,7 @@ def create_app(database_url=None):
         if review and (review['run_id'] != attempt.final_run_id or
                        review['explanation_count'] != len(attempt.explanations) or
                        review['event_count'] != len(events)):
-            review = None  # preserve history; new evidence needs a fresh review
+            review = None
         physical = 9 if final and final.passed else (0 if final else None)
         penalties = sum(r.penalized for r in runs)
         scores = {'procedure': review['procedure'] if review else None,
@@ -77,46 +109,109 @@ def create_app(database_url=None):
 
     @app.get('/api/health')
     def health():
-        return {'status': 'ok', 'mode': 'local-prototype', 'rag': False, 'generative_tutor': False, 'voice': 'browser', 'generative_voice': False}
+        enabled = school_auth_enabled()
+        return {
+            'status': 'ok',
+            'mode': 'school-auth' if enabled else 'local-prototype',
+            'school_auth': enabled,
+            'rag': False,
+            'generative_tutor': False,
+            'voice': 'browser',
+            'generative_voice': False,
+        }
 
-    @app.get('/api/teacher/labs', dependencies=[Depends(teacher)])
-    def labs(session=Depends(db)):
-        return [{'id': l.id, 'published': l.published, **l.data['public']} for l in session.scalars(select(Lab).order_by(Lab.created_at.desc()))]
+    @app.get('/api/teacher/labs')
+    def labs(session=Depends(db), actor: User | None = Depends(teacher_user)):
+        rows = list(session.scalars(select(Lab).order_by(Lab.created_at.desc())))
+        if school_auth_enabled() and actor and actor.role == 'teacher':
+            allowed = set(teacher_subject_ids(session, actor))
+            rows = [l for l in rows if l.subject_id is None or l.subject_id in allowed]
+        return [{'id': l.id, 'published': l.published, 'grade_id': l.grade_id, 'subject_id': l.subject_id, **l.data['public']} for l in rows]
 
-    @app.post('/api/teacher/labs', dependencies=[Depends(teacher)], status_code=201)
-    def new_lab(request: LabRequest, session=Depends(db)):
-        lab = Lab(id=uuid4().hex[:10], data=generate(request))
-        session.add(lab); session.commit()
-        return {'id': lab.id, 'published': lab.published, **lab.data['public']}
+    @app.post('/api/teacher/labs', status_code=201)
+    def new_lab(request: LabRequest, session=Depends(db), actor: User | None = Depends(teacher_user)):
+        if school_auth_enabled() and actor and actor.role == 'teacher':
+            require_teacher_subject(session, actor, request.subject_id)
+        lab = Lab(
+            id=uuid4().hex[:10],
+            data=generate(request),
+            grade_id=request.grade_id,
+            subject_id=request.subject_id,
+        )
+        session.add(lab)
+        session.commit()
+        return {'id': lab.id, 'published': lab.published, 'grade_id': lab.grade_id, 'subject_id': lab.subject_id, **lab.data['public']}
 
-    @app.post('/api/teacher/labs/{code}/publish', dependencies=[Depends(teacher)])
-    def publish(code: str, session=Depends(db)):
+    @app.post('/api/teacher/labs/{code}/publish')
+    def publish(code: str, session=Depends(db), actor: User | None = Depends(teacher_user)):
         lab = get_lab(session, code)
-        lab.published = True; session.commit()
+        if school_auth_enabled() and actor and actor.role == 'teacher':
+            require_teacher_subject(session, actor, lab.subject_id)
+        lab.published = True
+        session.commit()
         return {'id': lab.id, 'published': True}
 
     @app.get('/api/labs/{code}')
     def public_lab(code: str, session=Depends(db)):
         lab = get_lab(session, code)
-        # Do not leak the preview or the solution into the waiting room.
         return {'id': code, 'published': lab.published, 'spec': lab.data['public'] if lab.published else None}
 
     @app.post('/api/labs/{code}/join', status_code=201)
-    def join(code: str, request: JoinRequest, session=Depends(db)):
+    def join(
+        code: str,
+        request: JoinRequest,
+        session=Depends(db),
+        authorization: str | None = Header(default=None),
+    ):
         lab = get_lab(session, code)
         if not lab.published:
             raise HTTPException(409, 'La profesora todavía está preparando la actividad.')
         token = token_urlsafe(32)
-        attempt = Attempt(id=str(uuid4()), lab_id=code, alias=request.alias.strip(), token_hash=sha256(token.encode()).hexdigest())
-        if not attempt.alias:
-            raise HTTPException(422, 'Escribe un alias de prueba.')
-        session.add(attempt); session.commit()
+        if school_auth_enabled():
+            bearer = bearer_token(authorization)
+            if not bearer:
+                raise HTTPException(401, 'Debes iniciar sesión.')
+            user = resolve_session(session, bearer)
+            if not user or user.role not in {'student', 'admin'}:
+                raise HTTPException(403, 'Se requiere una cuenta de alumno.')
+            if not request.enrollment_id:
+                raise HTTPException(422, 'Indica la matrícula (enrollment_id).')
+            enrollment = session.get(Enrollment, request.enrollment_id)
+            if not enrollment or not enrollment.is_active:
+                raise HTTPException(403, 'Matrícula no válida.')
+            if user.role == 'student' and enrollment.student_user_id != user.id:
+                raise HTTPException(403, 'La matrícula no te pertenece.')
+            if lab.grade_id and enrollment.grade_id != lab.grade_id:
+                raise HTTPException(403, 'La matrícula no corresponde al grado de la actividad.')
+            if lab.subject_id and enrollment.subject_id != lab.subject_id:
+                raise HTTPException(403, 'La matrícula no corresponde a la asignatura de la actividad.')
+            alias = user.display_name[:40]
+            attempt = Attempt(
+                id=str(uuid4()),
+                lab_id=code,
+                alias=alias,
+                token_hash=sha256(token.encode()).hexdigest(),
+                user_id=user.id,
+                enrollment_id=enrollment.id,
+            )
+        else:
+            if not request.alias or not request.alias.strip():
+                raise HTTPException(422, 'Escribe un alias de prueba.')
+            attempt = Attempt(
+                id=str(uuid4()),
+                lab_id=code,
+                alias=request.alias.strip(),
+                token_hash=sha256(token.encode()).hexdigest(),
+            )
+        session.add(attempt)
+        session.commit()
         return {'id': attempt.id, 'token': token, 'phase': attempt.phase}
 
     @app.post('/api/attempts/{attempt_id}/evaluate')
     def start_evaluation(attempt_id: str, session=Depends(db), x_attempt_token: str = Header(default='')):
         attempt = owned(session, attempt_id, x_attempt_token)
-        attempt.phase = 'evaluation'; session.commit()
+        attempt.phase = 'evaluation'
+        session.commit()
         return {'phase': attempt.phase}
 
     @app.post('/api/attempts/{attempt_id}/events')
@@ -130,7 +225,8 @@ def create_app(database_url=None):
             if existing:
                 if existing.data != payload:
                     raise HTTPException(409, 'Un ID de evento no puede cambiar su contenido.')
-                accepted.append(str(event.id)); continue
+                accepted.append(str(event.id))
+                continue
             run = session.get(Run, str(event.run_id)) if event.run_id else None
             if run and run.attempt_id != attempt.id:
                 raise HTTPException(403, 'El lanzamiento pertenece a otra sesión.')
@@ -149,7 +245,6 @@ def create_app(database_url=None):
                     run.invalid = True
                 else:
                     run.landed = True
-                    # Compare PhET's observation with independent physics when supplied.
                     expected = solve(LaunchState(**run.initial))
                     if event.observed_range_m is not None and not isclose(event.observed_range_m, expected['range_m'], abs_tol=.05):
                         run.invalid = True
@@ -231,23 +326,30 @@ def create_app(database_url=None):
         data = report(session, owned(session, attempt_id, x_attempt_token))
         return PlainTextResponse(report_text(data), headers={'Content-Disposition': f'attachment; filename="monti-{attempt_id}.txt"'})
 
-    @app.get('/api/teacher/labs/{code}/report.txt', response_class=PlainTextResponse, dependencies=[Depends(teacher)])
-    def class_export(code: str, session=Depends(db)):
+    @app.get('/api/teacher/labs/{code}/report.txt', response_class=PlainTextResponse)
+    def class_export(code: str, session=Depends(db), actor: User | None = Depends(teacher_user)):
         lab = get_lab(session, code)
+        if school_auth_enabled() and actor and actor.role == 'teacher':
+            require_teacher_subject(session, actor, lab.subject_id)
         rows = [report_text(report(session, a)) for a in session.scalars(select(Attempt).where(Attempt.lab_id == code))]
         text = f"MONTI · {lab.data['public']['course']}\n{lab.data['public']['instruction']}\n\n" + '\n\n'.join(rows)
         return PlainTextResponse(text, headers={'Content-Disposition': f'attachment; filename="monti-curso-{lab.id}.txt"'})
 
-    @app.get('/api/teacher/labs/{code}/results', dependencies=[Depends(teacher)])
-    def results(code: str, session=Depends(db)):
-        get_lab(session, code)
+    @app.get('/api/teacher/labs/{code}/results')
+    def results(code: str, session=Depends(db), actor: User | None = Depends(teacher_user)):
+        lab = get_lab(session, code)
+        if school_auth_enabled() and actor and actor.role == 'teacher':
+            require_teacher_subject(session, actor, lab.subject_id)
         return [report(session, a) for a in session.scalars(select(Attempt).where(Attempt.lab_id == code))]
 
-    @app.post('/api/teacher/attempts/{attempt_id}/review', dependencies=[Depends(teacher)])
-    def review(attempt_id: str, value: TeacherReview, session=Depends(db)):
+    @app.post('/api/teacher/attempts/{attempt_id}/review')
+    def review(attempt_id: str, value: TeacherReview, session=Depends(db), actor: User | None = Depends(teacher_user)):
         attempt = session.get(Attempt, attempt_id)
         if not attempt or not attempt.final_run_id:
             raise HTTPException(409, 'El estudiante todavía no entregó un resultado.')
+        lab = get_lab(session, attempt.lab_id)
+        if school_auth_enabled() and actor and actor.role == 'teacher':
+            require_teacher_subject(session, actor, lab.subject_id)
         event_count = len(list(session.scalars(select(RecordedEvent.id).where(RecordedEvent.attempt_id == attempt.id))))
         attempt.reviews = [*attempt.reviews, {**value.model_dump(), 'reviewed_at': now().isoformat(),
                                             'run_id': attempt.final_run_id, 'explanation_count': len(attempt.explanations),
@@ -256,5 +358,6 @@ def create_app(database_url=None):
         return report(session, attempt)
 
     return app
+
 
 app = create_app()

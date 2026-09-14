@@ -6,7 +6,7 @@ React reúne las páginas docente y estudiante. FastAPI conserva actividades, in
 
 La interfaz comprueba origen, ventana emisora, versión y canal. El canal separa instancias; no es una credencial. La API valida esquema, pertenencia a la sesión, condiciones del lanzamiento y publicación. Calcula la trayectoria con sus propias ecuaciones y no acepta notas enviadas por el navegador.
 
-Un navegador modificado aún puede fabricar evidencia compatible con esas reglas. La base no garantiza autenticidad de un cliente manipulado. La autenticación escolar y la integridad de sesiones son parte del siguiente hito. La clave docente del frontend es pública y solo sirve para desarrollo local.
+Un navegador modificado aún puede fabricar evidencia compatible con esas reglas. La base no garantiza autenticidad de un cliente manipulado. Con `MONTI_FEATURE_SCHOOL_AUTH=true`, la API usa autenticación de primer partido (usuarios/roles/sesiones opacas en SQLAlchemy), alcance por asignatura/matrícula y retira `X-Teacher-Key` del flujo de aula. Con el flag en falso se conserva el prototipo local (clave docente pública + alias). El despliegue escolar requiere HTTPS.
 
 ## Actividad generada
 

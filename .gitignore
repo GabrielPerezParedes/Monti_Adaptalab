@@ -14,3 +14,4 @@ __pycache__/
 apps/web/public/phet/
 coverage/
 .DS_Store
+apps/api/alembic/versions/__pycache__/

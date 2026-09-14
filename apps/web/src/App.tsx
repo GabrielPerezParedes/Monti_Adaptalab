@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { api, post } from "./api";
+import {
+  api,
+  loadSession,
+  post,
+  saveSession,
+  schoolAuthEnabled,
+  type SessionUser,
+} from "./api";
 import PhETLab from "./PhETLab";
 import MontiCompanion from "./MontiCompanion";
+import Login from "./Login";
+import Admin from "./Admin";
 import type {
   Attempt,
   Difficulty,
@@ -532,7 +541,11 @@ function Student() {
     [lab, setLab] = useState<Lab | null>(null),
     [waiting, setWaiting] = useState(false);
   const [attempt, setAttempt] = useState<Attempt | null>(null),
-    [alias, setAlias] = useState("Estudiante de prueba");
+    [alias, setAlias] = useState("Estudiante de prueba"),
+    [enrollmentId, setEnrollmentId] = useState(""),
+    [enrollments, setEnrollments] = useState<
+      { id: string; grade_id: string; subject_id: string; is_active: boolean }[]
+    >([]);
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [state, setState] = useState<Launch | null>(null);
@@ -661,13 +674,28 @@ function Student() {
     if (event.kind === "landed") setLastLanded(event.run_id || null);
     if (["reset", "erase", "launch"].includes(event.kind)) setLastLanded(null);
   }
+  useEffect(() => {
+    if (!schoolAuthEnabled()) return;
+    void api<{ id: string; grade_id: string; subject_id: string; is_active: boolean }[]>(
+      "/student/enrollments",
+    )
+      .then((rows) => {
+        setEnrollments(rows);
+        if (rows[0]) setEnrollmentId(rows[0].id);
+      })
+      .catch(() => undefined);
+  }, []);
+
   async function join(e: FormEvent) {
     e.preventDefault();
     if (!lab) return;
     setBusy(true);
     setError("");
     try {
-      const a = await api<Attempt>(`/labs/${lab.id}/join`, post({ alias }));
+      const body = schoolAuthEnabled()
+        ? { enrollment_id: enrollmentId }
+        : { alias };
+      const a = await api<Attempt>(`/labs/${lab.id}/join`, post(body));
       localStorage.setItem(`monti-attempt-${lab.id}`, JSON.stringify(a));
       setAttempt(a);
     } catch (e) {
@@ -765,7 +793,18 @@ function Student() {
       {!lab && !waiting && !error && <p role="status">Buscando tu actividad…</p>}
       {waiting && <div className="waiting" role="status"><span className="pulse" /><h2>Tu profesora está preparando el laboratorio.</h2><p>Se abrirá automáticamente cuando lo publique.</p></div>}
       {lab && !attempt && <form onSubmit={join} className="join-form"><h2>{lab.topic}</h2><p>{lab.course} · Dificultad {levels[lab.difficulty].toLowerCase()}</p>
-        <label>Tu nombre o alias de prueba<input value={alias} onChange={e => setAlias(e.target.value)} required maxLength={40} autoComplete="nickname" /></label>
+        {schoolAuthEnabled() ? (
+          <label>Tu matrícula
+            <select value={enrollmentId} onChange={(e) => setEnrollmentId(e.target.value)} required>
+              <option value="">Selecciona</option>
+              {enrollments.map((row) => (
+                <option key={row.id} value={row.id}>{row.id.slice(0, 8)}…</option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label>Tu nombre o alias de prueba<input value={alias} onChange={e => setAlias(e.target.value)} required maxLength={40} autoComplete="nickname" /></label>
+        )}
         <button className="primary" disabled={busy}>{busy ? 'Entrando…' : 'Entrar al laboratorio'}</button>
       </form>}
     </>}
@@ -879,14 +918,90 @@ function Student() {
 }
 
 export default function App() {
-  const student = location.pathname.startsWith("/student");
+  const path = location.pathname;
+  const student = path.startsWith("/student");
+  const adminPath = path.startsWith("/admin");
+  const school = schoolAuthEnabled();
+  const [user, setUser] = useState<SessionUser | null>(() => loadSession()?.user ?? null);
+
+  useEffect(() => {
+    if (!school || !loadSession()?.token) return;
+    void api<SessionUser & { scope?: unknown }>("/auth/me")
+      .then((me) => setUser({ id: me.id, login: me.login, display_name: me.display_name, role: me.role }))
+      .catch(() => {
+        saveSession(null);
+        setUser(null);
+      });
+  }, [school]);
+
+  async function logout() {
+    try {
+      await api("/auth/logout", post());
+    } catch {
+      /* session may already be gone */
+    }
+    saveSession(null);
+    setUser(null);
+    location.href = "/login";
+  }
+
+  if (school && !user) {
+    return (
+      <>
+        <header className="app-header">
+          <a href="/login" className="brand">
+            MONTI<span>Laboratorio de Física</span>
+          </a>
+          <span className="prototype">Acceso escolar</span>
+        </header>
+        <Login
+          onLogin={(next) => {
+            setUser(next);
+            location.href =
+              next.role === "admin"
+                ? "/admin"
+                : next.role === "student"
+                  ? "/student"
+                  : "/teacher";
+          }}
+        />
+      </>
+    );
+  }
+
+  if (school && user?.role === "admin" && adminPath) {
+    return (
+      <>
+        <header className="app-header">
+          <a href="/admin" className="brand">
+            MONTI<span>Laboratorio de Física</span>
+          </a>
+          <nav aria-label="Espacios de trabajo">
+            <a href="/admin" aria-current="page">
+              Administración
+            </a>
+            <a href="/teacher">Docente</a>
+          </nav>
+          <span className="prototype">
+            {user.display_name} · {user.role}
+            <button className="secondary" type="button" onClick={() => void logout()}>
+              Cerrar sesión
+            </button>
+          </span>
+        </header>
+        <Admin />
+      </>
+    );
+  }
+
   return (
     <>
       <header className="app-header">
-        <a href="/teacher" className="brand">
+        <a href={student ? "/student" : "/teacher"} className="brand">
           MONTI<span>Laboratorio de Física</span>
         </a>
         <nav aria-label="Espacios de trabajo">
+          {school && user?.role === "admin" ? <a href="/admin">Administración</a> : null}
           <a href="/teacher" aria-current={!student ? "page" : undefined}>
             Docente
           </a>
@@ -894,7 +1009,16 @@ export default function App() {
             Estudiante
           </a>
         </nav>
-        <span className="prototype">Prueba local · datos de ejemplo</span>
+        <span className="prototype">
+          {school && user
+            ? `${user.display_name} · ${user.role}`
+            : "Prueba local · datos de ejemplo"}
+          {school && user ? (
+            <button className="secondary" type="button" onClick={() => void logout()}>
+              Cerrar sesión
+            </button>
+          ) : null}
+        </span>
       </header>
       {student ? <Student /> : <Teacher />}
       <footer className="app-footer">

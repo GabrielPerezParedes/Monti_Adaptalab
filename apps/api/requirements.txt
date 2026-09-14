@@ -4,3 +4,7 @@ uvicorn>=0.34,<1
 sqlalchemy>=2.0,<3
 psycopg[binary]>=3.2,<4
 python-dotenv>=1.2,<2
+alembic>=1.14,<2
+bcrypt>=4.2,<5
+pytest>=8.3,<9
+httpx>=0.28,<1

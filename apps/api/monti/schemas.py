@@ -9,9 +9,12 @@ class LabRequest(StrictModel):
     course: str = Field(default='4.º de secundaria', min_length=1, max_length=60)
     difficulty: Literal['basic', 'medium', 'advanced'] = 'basic'
     seed: int = Field(default=42, ge=0, le=2**31-1)
+    grade_id: str | None = Field(default=None, max_length=36)
+    subject_id: str | None = Field(default=None, max_length=36)
 
 class JoinRequest(StrictModel):
-    alias: str = Field(min_length=1, max_length=40, pattern=r'^[\w áéíóúñÁÉÍÓÚÑ.-]+$')
+    alias: str | None = Field(default=None, min_length=1, max_length=40, pattern=r'^[\w áéíóúñÁÉÍÓÚÑ.-]+$')
+    enrollment_id: str | None = Field(default=None, max_length=36)
 
 class LaunchState(StrictModel):
     speed_m_s: float = Field(gt=0, le=30)
