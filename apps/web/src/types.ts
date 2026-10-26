@@ -37,11 +37,13 @@ export type Report = {
   run_count: number;
   penalized_runs: number;
   scores: Record<
-    "procedure" | "comprehension" | "physical" | "efficiency",
+    "procedure" | "comprehension" | "physical" | "learning_evidence",
     number | null
   >;
   total: number | null;
   max_score: number;
+  rubric_version?: string;
+  attempt_policy_version?: string;
   passed: boolean | null;
   status: string;
   summary: string;

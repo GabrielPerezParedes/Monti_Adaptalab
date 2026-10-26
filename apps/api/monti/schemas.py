@@ -32,6 +32,7 @@ class SimEvent(StrictModel):
     value: float | bool | str | None = None
     observed_range_m: float | None = None
     observed_time_s: float | None = Field(default=None, ge=0)
+    technical_failure: bool = False
 
     @model_validator(mode='after')
     def check_payload(self):

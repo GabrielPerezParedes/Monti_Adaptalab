@@ -11,7 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from .database import Attempt, Enrollment, Lab, RecordedEvent, Run, User, connect, now
 from .generation import generate, validate_launch
-from .physics import efficiency, solve
+from .physics import learning_evidence_score, solve
+from .scoring import score_comprehension, score_procedure
 from .schemas import EventBatch, Explanation, JoinRequest, LabRequest, LaunchState, Submission, TeacherReview
 from .auth.deps import (
     bearer_token,
@@ -84,28 +85,41 @@ def create_app(database_url=None):
     def report(session, attempt):
         runs = runs_for(session, attempt)
         events = list(session.scalars(select(RecordedEvent).where(RecordedEvent.attempt_id == attempt.id).order_by(RecordedEvent.id)))
+        evidence = [e.data for e in events]
         final = session.get(Run, attempt.final_run_id) if attempt.final_run_id else None
-        review = attempt.reviews[-1] if attempt.reviews else None
-        if review and (review['run_id'] != attempt.final_run_id or
-                       review['explanation_count'] != len(attempt.explanations) or
-                       review['event_count'] != len(events)):
-            review = None
         physical = 9 if final and final.passed else (0 if final else None)
         penalties = sum(r.penalized for r in runs)
-        scores = {'procedure': review['procedure'] if review else None,
-                  'comprehension': review['comprehension'] if review else None,
-                  'physical': physical, 'efficiency': efficiency(penalties)}
+        learning = learning_evidence_score(penalties)
+        if final is None:
+            procedure = comprehension = None
+        else:
+            procedure = score_procedure(evidence)
+            comprehension = score_comprehension(attempt.explanations)
+        scores = {
+            'procedure': procedure,
+            'comprehension': comprehension,
+            'physical': physical,
+            'learning_evidence': learning if final is not None else None,
+        }
         total = round(sum(scores.values()), 2) if all(v is not None for v in scores.values()) else None
         result = solve(LaunchState(**final.initial)) if final else None
-        summary = f'Realizó {len(runs)} lanzamientos. Se registraron {penalties} fallos o reinicios computables y {len(attempt.explanations)} explicaciones.'
+        summary = (
+            f'Realizó {len(runs)} lanzamientos. Se registraron {penalties} fallos o reinicios '
+            f'pedagógicos computables y {len(attempt.explanations)} explicaciones. '
+            'Puntaje emitido por MONTI para carga en registros (casilla Saber); '
+            'contraste Ser/Hacer fuera del laboratorio.'
+        )
         if final:
             summary += ' El último resultado entregado ' + ('alcanzó el objetivo.' if final.passed else 'quedó fuera de la tolerancia.')
-        return {'id': attempt.id, 'alias': attempt.alias, 'lab_id': attempt.lab_id, 'phase': attempt.phase,
-                'run_count': len(runs), 'penalized_runs': penalties, 'scores': scores, 'total': total, 'max_score': 45,
-                'status': 'reviewed' if total is not None else 'pending', 'result': result,
-                'passed': final.passed if final else None, 'summary': summary, 'explanations': attempt.explanations,
-                'reviews': attempt.reviews, 'evidence': [e.data for e in events],
-                'submitted_state': final.initial if final else None}
+        return {
+            'id': attempt.id, 'alias': attempt.alias, 'lab_id': attempt.lab_id, 'phase': attempt.phase,
+            'run_count': len(runs), 'penalized_runs': penalties, 'scores': scores, 'total': total, 'max_score': 45,
+            'rubric_version': '45-v1', 'attempt_policy_version': '1.0',
+            'status': 'scored' if total is not None else 'pending', 'result': result,
+            'passed': final.passed if final else None, 'summary': summary, 'explanations': attempt.explanations,
+            'reviews': attempt.reviews, 'evidence': evidence,
+            'submitted_state': final.initial if final else None,
+        }
 
     @app.get('/api/health')
     def health():
@@ -252,8 +266,10 @@ def create_app(database_url=None):
                 for active in runs_for(session, attempt):
                     if not active.checked and not active.abandoned:
                         active.abandoned = True
-                        if active.phase == 'evaluation':
+                        if active.phase == 'evaluation' and not event.technical_failure:
                             active.penalized = True
+            if event.kind == 'invalidated' and event.technical_failure and run:
+                run.penalized = False
             session.add(RecordedEvent(attempt_id=attempt.id, event_id=str(event.id), data=payload))
             session.flush()
             accepted.append(str(event.id))
@@ -308,17 +324,31 @@ def create_app(database_url=None):
         return report(session, owned(session, attempt_id, x_attempt_token))
 
     def report_text(data):
-        labels = {'procedure': 'Procedimiento /18', 'comprehension': 'Comprensión /14', 'physical': 'Resultado físico /9', 'efficiency': 'Eficiencia /4'}
+        labels = {
+            'procedure': 'Procedimiento /18',
+            'comprehension': 'Comprensión /14',
+            'physical': 'Resultado físico /9',
+            'learning_evidence': 'Evidencia de aprendizaje /4',
+        }
         result_lines = []
         if data['result']:
             s, r = data['submitted_state'], data['result']
             result_lines = [f"Condiciones entregadas: rapidez {s['speed_m_s']} m/s; ángulo {s['angle_deg']}°; altura {s['height_m']} m.",
                             f"Alcance: {r['range_m']:.3f} m. Tiempo: {r['flight_time_s']:.3f} s. Altura máxima: {r['max_height_m']:.3f} m."]
-        text = '\n'.join(['MONTI · Resumen de actividad', f"Estudiante: {data['alias']}", f"Actividad: {data['lab_id']}",
-                          data['summary'], f"Puntaje: {data['total'] if data['total'] is not None else 'Pendiente de revisión'} / 45",
-                          *result_lines,
-                          *[f'{labels[key]}: {value if value is not None else "Pendiente"}' for key, value in data['scores'].items()],
-                          'Última explicación: ' + (data['explanations'][-1]['text'] if data['explanations'] else 'Sin explicación registrada.')])
+        evidence_kinds = sorted({e.get('kind') for e in data.get('evidence') or [] if e.get('kind')})
+        text = '\n'.join([
+            'MONTI · Informe por alumno (casilla Saber /45)',
+            f"Estudiante: {data['alias']}",
+            f"Actividad: {data['lab_id']}",
+            f"Rúbrica: {data.get('rubric_version', '45-v1')} · Política: {data.get('attempt_policy_version', '1.0')}",
+            data['summary'],
+            f"Puntaje MONTI (cargar a registros): {data['total'] if data['total'] is not None else 'Pendiente'} / 45",
+            *result_lines,
+            *[f'{labels.get(key, key)}: {value if value is not None else "Pendiente"}' for key, value in data['scores'].items()],
+            'Evidencia de acciones (kinds): ' + (', '.join(evidence_kinds) if evidence_kinds else 'ninguna'),
+            'Última explicación: ' + (data['explanations'][-1]['text'] if data['explanations'] else 'Sin explicación registrada.'),
+            'Nota: contraste Ser/Hacer fuera del laboratorio; este informe no exige override en el producto.',
+        ])
         return text
 
     @app.get('/api/attempts/{attempt_id}/report.txt', response_class=PlainTextResponse)

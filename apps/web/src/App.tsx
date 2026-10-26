@@ -30,9 +30,14 @@ const names = {
   procedure: "Procedimiento",
   comprehension: "Comprensión",
   physical: "Resultado físico",
-  efficiency: "Eficiencia",
+  learning_evidence: "Evidencia de aprendizaje",
 };
-const max = { procedure: 18, comprehension: 14, physical: 9, efficiency: 4 };
+const max = {
+  procedure: 18,
+  comprehension: 14,
+  physical: 9,
+  learning_evidence: 4,
+};
 const controls: Record<string, string> = {
   speed_m_s: "Rapidez inicial (m/s)",
   angle_deg: "Ángulo (°)",
@@ -248,7 +253,7 @@ function Teacher() {
             <p>
               Procedimiento <b>18</b> · Comprensión <b>14</b>
               <br />
-              Resultado <b>9</b> · Eficiencia <b>4</b>
+              Resultado <b>9</b> · Evidencia de aprendizaje <b>4</b>
             </p>
           </div>
         </section>
@@ -480,9 +485,16 @@ function ResultRow({
               ))}
             </ol>
           </details>
+          {report.total != null && (
+            <p className="field-hint">
+              Puntaje MONTI listo para cargar a registros escolares (casilla
+              Saber). El contraste con Ser/Hacer se hace fuera del laboratorio.
+              No es necesario corregir la nota aquí.
+            </p>
+          )}
           {report.reviews.map((review, i) => (
             <p className="field-hint" key={i}>
-              Revisión {i + 1}: {review.reason}
+              Nota docente {i + 1}: {review.reason}
             </p>
           ))}
           {report.explanations.map((entry, i) => (
@@ -490,6 +502,10 @@ function ResultRow({
           ))}
           {report.result && (
             <form onSubmit={review} className="review-form">
+              <p className="field-hint">
+                Nota opcional para el expediente (no sustituye el puntaje MONTI
+                mostrado arriba).
+              </p>
               <label>
                 Procedimiento /18
                 <input
