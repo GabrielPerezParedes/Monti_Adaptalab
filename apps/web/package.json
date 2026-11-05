@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --host localhost",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "firebase": "^13.2.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

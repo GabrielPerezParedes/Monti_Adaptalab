@@ -88,6 +88,10 @@ function Teacher() {
     [error, setError] = useState(""),
     [copied, setCopied] = useState(false);
   const [reports, setReports] = useState<Report[]>([]);
+  const [subjectId, setSubjectId] = useState(""),
+    [gradeId, setGradeId] = useState(""),
+    [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]),
+    [grades, setGrades] = useState<{ id: string; name: string }[]>([]);
   const refresh = useCallback(async () => {
     try {
       const rows = await api<Lab[]>("/teacher/labs", {}, undefined, true);
@@ -100,6 +104,20 @@ function Teacher() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  useEffect(() => {
+    void api<{
+      subjects: { id: string; name: string }[];
+      grades: { id: string; name: string; sort_order: number }[];
+    }>("/teacher/scope", {}, undefined, true)
+      .then((scope) => {
+        setSubjects(scope.subjects);
+        setGrades(scope.grades);
+        setSubjectId((prev) => prev || scope.subjects[0]?.id || "");
+        setGradeId((prev) => prev || scope.grades[0]?.id || "");
+        if (scope.grades[0]?.name) setCourse(scope.grades[0].name);
+      })
+      .catch((e) => setError((e as Error).message));
+  }, []);
   useEffect(() => {
     if (!current) return;
     let alive = true;
@@ -132,7 +150,13 @@ function Teacher() {
       const seed = crypto.getRandomValues(new Uint32Array(1))[0] % 2147483647;
       const lab = await api<Lab>(
         "/teacher/labs",
-        post({ course, difficulty, seed }),
+        post({
+          course,
+          difficulty,
+          seed,
+          ...(subjectId ? { subject_id: subjectId } : {}),
+          ...(gradeId ? { grade_id: gradeId } : {}),
+        }),
         undefined,
         true,
       );
@@ -201,12 +225,50 @@ function Teacher() {
           <form onSubmit={create}>
             <label>
               Curso
-              <input
-                value={course}
-                maxLength={60}
+              {grades.length > 0 ? (
+                <select
+                  value={gradeId}
+                  required
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setGradeId(id);
+                    const g = grades.find((row) => row.id === id);
+                    if (g) setCourse(g.name);
+                  }}
+                >
+                  {grades.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={course}
+                  maxLength={60}
+                  required
+                  onChange={(e) => setCourse(e.target.value)}
+                />
+              )}
+            </label>
+            <label>
+              Asignatura
+              <select
+                value={subjectId}
                 required
-                onChange={(e) => setCourse(e.target.value)}
-              />
+                disabled={!subjects.length}
+                onChange={(e) => setSubjectId(e.target.value)}
+              >
+                {!subjects.length ? (
+                  <option value="">Sin asignatura asignada</option>
+                ) : (
+                  subjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))
+                )}
+              </select>
             </label>
             <label>
               Tema

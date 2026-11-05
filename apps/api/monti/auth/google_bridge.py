@@ -1,11 +1,13 @@
-"""Google Workspace → MONTI session bridge (via Supabase Auth JWT)."""
+"""Google Workspace → MONTI session bridge (Firebase ID token o Supabase JWT)."""
 from __future__ import annotations
 
 import os
 from uuid import uuid4
 
+import httpx
 import jwt
 from fastapi import HTTPException
+from jwt import PyJWKClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,12 +15,46 @@ from ..database import Enrollment, PilotRoster, TeacherSubjectAssignment, User, 
 
 
 FORBIDDEN_ROSTER_COLUMN_MARKERS = ('password', 'passwd', 'clave', 'secret', 'token')
+_FIREBASE_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
+_firebase_jwk_client: PyJWKClient | None = None
+
+
+def _flag_on(name: str) -> bool:
+    return os.getenv(name, 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def firebase_project_id() -> str:
+    return (os.getenv('FIREBASE_PROJECT_ID') or os.getenv('VITE_FIREBASE_PROJECT_ID') or '').strip()
+
+
+def firebase_web_api_key() -> str:
+    key = (os.getenv('FIREBASE_WEB_API_KEY') or os.getenv('VITE_FIREBASE_API_KEY') or '').strip()
+    if key:
+        return key
+    # Si la API arrancó antes de añadir la variable, leer .env en caliente.
+    try:
+        from pathlib import Path
+
+        from dotenv import dotenv_values
+
+        env_path = Path(__file__).resolve().parents[2] / '.env'
+        values = dotenv_values(env_path)
+        return (values.get('FIREBASE_WEB_API_KEY') or values.get('VITE_FIREBASE_API_KEY') or '').strip()
+    except Exception:
+        return ''
+
+
+def _supabase_ready() -> bool:
+    secret = (os.getenv('SUPABASE_JWT_SECRET') or '').strip()
+    return bool(secret) and secret != 'TU_JWT_SECRET'
+
+
+def _firebase_ready() -> bool:
+    return bool(firebase_project_id())
 
 
 def google_login_enabled() -> bool:
-    flag = os.getenv('MONTI_FEATURE_GOOGLE_LOGIN', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
-    secret = (os.getenv('SUPABASE_JWT_SECRET') or '').strip()
-    return flag and bool(secret) and secret != 'TU_JWT_SECRET'
+    return _flag_on('MONTI_FEATURE_GOOGLE_LOGIN') and (_firebase_ready() or _supabase_ready())
 
 
 def allowed_google_domain() -> str:
@@ -43,8 +79,68 @@ def assert_allowed_domain(email: str) -> None:
         raise HTTPException(403, f'Solo se admiten cuentas @{allowed}.')
 
 
-def claims_from_access_token(access_token: str) -> dict:
-    """Verify Supabase JWT and return claims. Monkeypatch in tests."""
+def _firebase_jwks() -> PyJWKClient:
+    global _firebase_jwk_client
+    if _firebase_jwk_client is None:
+        _firebase_jwk_client = PyJWKClient(_FIREBASE_JWKS_URL, cache_keys=True)
+    return _firebase_jwk_client
+
+
+def _claims_via_identity_toolkit(id_token: str) -> dict:
+    """Valida el ID token con Identity Toolkit (no requiere paquete cryptography)."""
+    api_key = firebase_web_api_key()
+    if not api_key:
+        raise HTTPException(503, 'Login Google no está configurado (FIREBASE_WEB_API_KEY).')
+    try:
+        response = httpx.post(
+            f'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={api_key}',
+            json={'idToken': id_token},
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(503, 'No se pudo verificar el token con Firebase.') from exc
+    if response.status_code != 200:
+        raise HTTPException(401, 'Token de Google/Firebase no válido.')
+    users = (response.json() or {}).get('users') or []
+    if not users:
+        raise HTTPException(401, 'Token de Google/Firebase no válido.')
+    user = users[0]
+    verified = user.get('emailVerified')
+    email_verified = verified is True or str(verified).lower() == 'true'
+    return {
+        'email': user.get('email'),
+        'email_verified': email_verified,
+        'sub': user.get('localId'),
+        'name': user.get('displayName'),
+    }
+
+
+def claims_from_firebase_id_token(access_token: str) -> dict:
+    project_id = firebase_project_id()
+    if not project_id:
+        raise HTTPException(503, 'Login Google no está configurado (FIREBASE_PROJECT_ID).')
+    try:
+        key = _firebase_jwks().get_signing_key_from_jwt(access_token)
+        return jwt.decode(
+            access_token,
+            key.key,
+            algorithms=['RS256'],
+            audience=project_id,
+            issuer=f'https://securetoken.google.com/{project_id}',
+        )
+    except jwt.exceptions.MissingCryptographyError:
+        return _claims_via_identity_toolkit(access_token)
+    except jwt.PyJWTError:
+        # Token firmado pero JWKS falló, o cryptography ausente en otro camino
+        try:
+            return _claims_via_identity_toolkit(access_token)
+        except HTTPException:
+            raise
+    except Exception:
+        return _claims_via_identity_toolkit(access_token)
+
+
+def claims_from_supabase_jwt(access_token: str) -> dict:
     secret = (os.getenv('SUPABASE_JWT_SECRET') or '').strip()
     if not secret or secret == 'TU_JWT_SECRET':
         raise HTTPException(503, 'Login Google no está configurado (SUPABASE_JWT_SECRET).')
@@ -57,6 +153,24 @@ def claims_from_access_token(access_token: str) -> dict:
         )
     except jwt.PyJWTError as exc:
         raise HTTPException(401, 'Token de Google/Supabase no válido.') from exc
+
+
+def claims_from_access_token(access_token: str) -> dict:
+    """Verify Firebase ID token (RS256) or Supabase JWT (HS256). Monkeypatch in tests."""
+    try:
+        header = jwt.get_unverified_header(access_token)
+    except jwt.PyJWTError as exc:
+        raise HTTPException(401, 'Token de Google no válido.') from exc
+    alg = str(header.get('alg') or '')
+    if alg == 'RS256' and _firebase_ready():
+        return claims_from_firebase_id_token(access_token)
+    if alg == 'HS256' and _supabase_ready():
+        return claims_from_supabase_jwt(access_token)
+    if _firebase_ready():
+        return claims_from_firebase_id_token(access_token)
+    if _supabase_ready():
+        return claims_from_supabase_jwt(access_token)
+    raise HTTPException(503, 'Login Google no está configurado (Firebase o Supabase).')
 
 
 def require_roster(db: Session, email: str) -> PilotRoster:

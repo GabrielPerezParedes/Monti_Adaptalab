@@ -128,13 +128,26 @@ def teacher_subject_ids(db: Session, user: User) -> list[str]:
     return list(rows)
 
 
+def resolve_teacher_subject(db: Session, user: User, subject_id: str | None) -> str | None:
+    """Devuelve subject_id usable. Si falta, usa la primera asignatura del docente."""
+    if user.role == 'admin':
+        return subject_id
+    allowed = teacher_subject_ids(db, user)
+    if subject_id:
+        if allowed and subject_id not in allowed:
+            raise HTTPException(403, 'No tienes acceso a esta asignatura.')
+        return subject_id
+    return allowed[0] if allowed else None
+
+
 def require_teacher_subject(db: Session, user: User, subject_id: str | None) -> None:
+    """Valida acceso. Ya no exige asignatura obligatoria (MVP: auto o sin scope)."""
     if user.role == 'admin':
         return
-    if not subject_id:
-        raise HTTPException(403, 'La actividad no tiene asignatura asignada.')
     allowed = teacher_subject_ids(db, user)
-    if subject_id not in allowed:
+    if not subject_id:
+        return
+    if allowed and subject_id not in allowed:
         raise HTTPException(403, 'No tienes acceso a esta asignatura.')
 
 

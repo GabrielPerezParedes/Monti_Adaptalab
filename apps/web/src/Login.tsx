@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import {
+  GoogleAuthProvider,
+  getRedirectResult,
+  signInWithPopup,
+  type UserCredential,
+} from "firebase/auth";
 import { api, post, saveSession, schoolAuthEnabled, type SessionUser } from "./api";
+import { firebaseAuth, firebaseConfigured } from "./firebase";
 
 type Props = {
   onLogin: (user: SessionUser) => void;
@@ -12,23 +19,43 @@ type Health = {
   school_auth?: boolean;
 };
 
+/** Una sola lectura: StrictMode llama useEffect 2 veces y consumiría el redirect. */
+let redirectResultPromise: Promise<UserCredential | null> | null = null;
+
+function readRedirectResult(): Promise<UserCredential | null> {
+  if (!firebaseAuth) return Promise.resolve(null);
+  if (!redirectResultPromise) {
+    redirectResultPromise = getRedirectResult(firebaseAuth).catch((err) => {
+      redirectResultPromise = null;
+      throw err;
+    });
+  }
+  return redirectResultPromise;
+}
+
 function googleLoginConfigured(): boolean {
   return String(import.meta.env.VITE_FEATURE_GOOGLE_LOGIN || "false").toLowerCase() === "true";
 }
 
-function supabaseUrl(): string {
-  return String(import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+function googleProvider(allowedDomain: string) {
+  const provider = new GoogleAuthProvider();
+  provider.addScope("email");
+  provider.addScope("profile");
+  provider.setCustomParameters({ hd: allowedDomain, prompt: "select_account" });
+  return provider;
 }
 
-function supabaseAnonKey(): string {
-  return String(import.meta.env.VITE_SUPABASE_ANON_KEY || "");
-}
-
-function parseHashToken(): string | null {
-  const hash = window.location.hash.replace(/^#/, "");
-  if (!hash) return null;
-  const params = new URLSearchParams(hash);
-  return params.get("access_token");
+async function exchangeGoogleSession(
+  credential: UserCredential,
+  onLogin: (user: SessionUser) => void,
+) {
+  const idToken = await credential.user.getIdToken();
+  const data = await api<{ token: string; user: SessionUser }>(
+    "/auth/google",
+    post({ access_token: idToken }),
+  );
+  saveSession({ token: data.token, user: data.user });
+  onLogin(data.user);
 }
 
 export default function Login({ onLogin }: Props) {
@@ -38,8 +65,9 @@ export default function Login({ onLogin }: Props) {
   const [error, setError] = useState("");
   const [health, setHealth] = useState<Health | null>(null);
   const showGoogle =
-    googleLoginConfigured() && Boolean(health?.google_login) && Boolean(supabaseUrl());
+    googleLoginConfigured() && Boolean(health?.google_login) && firebaseConfigured();
   const showLocal = schoolAuthEnabled();
+  const allowedDomain = health?.google_allowed_domain || "montessorisucre.edu.bo";
 
   useEffect(() => {
     void api<Health>("/health")
@@ -48,25 +76,21 @@ export default function Login({ onLogin }: Props) {
   }, []);
 
   useEffect(() => {
-    const token = parseHashToken();
-    if (!token || !showGoogle) return;
+    if (!firebaseAuth || !showGoogle) return;
     let cancelled = false;
     (async () => {
       setBusy(true);
-      setError("");
       try {
-        const data = await api<{ token: string; user: SessionUser }>(
-          "/auth/google",
-          post({ access_token: token }),
-        );
-        if (cancelled) return;
-        saveSession({ token: data.token, user: data.user });
-        window.history.replaceState(null, "", window.location.pathname + window.location.search);
-        onLogin(data.user);
+        const result = await readRedirectResult();
+        if (cancelled || !result) return;
+        await exchangeGoogleSession(result, onLogin);
       } catch (err) {
         if (!cancelled) {
-          setError((err as Error).message);
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+          setError(
+            err instanceof TypeError
+              ? "No hay conexión con el servidor. Revisa la red e inténtalo de nuevo."
+              : (err as Error).message,
+          );
         }
       } finally {
         if (!cancelled) setBusy(false);
@@ -99,19 +123,31 @@ export default function Login({ onLogin }: Props) {
     }
   }
 
-  function startGoogle() {
-    const base = supabaseUrl();
-    const anon = supabaseAnonKey();
-    if (!base || !anon) {
-      setError("Falta VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY en el entorno web.");
+  async function startGoogle() {
+    if (!firebaseAuth) {
+      setError("Falta configuración Firebase (VITE_FIREBASE_*) en el entorno web.");
       return;
     }
-    const redirectTo = `${window.location.origin}${window.location.pathname}`;
-    const url = new URL(`${base}/auth/v1/authorize`);
-    url.searchParams.set("provider", "google");
-    url.searchParams.set("redirect_to", redirectTo);
-    url.searchParams.set("apikey", anon);
-    window.location.href = url.toString();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await signInWithPopup(firebaseAuth, googleProvider(allowedDomain));
+      await exchangeGoogleSession(result, onLogin);
+    } catch (err) {
+      const code =
+        typeof err === "object" && err && "code" in err ? String((err as { code: string }).code) : "";
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        setError("");
+      } else {
+        setError(
+          err instanceof TypeError
+            ? "No hay conexión con el servidor. Revisa la red e inténtalo de nuevo."
+            : (err as Error).message,
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -122,17 +158,17 @@ export default function Login({ onLogin }: Props) {
         </div>
         <p className="field-hint">
           {showGoogle
-            ? `Cuenta institucional @${health?.google_allowed_domain || "montessorisucre.edu.bo"} (Google Workspace).`
+            ? `Cuenta institucional @${allowedDomain} (Google Workspace).`
             : "Usa tu cuenta institucional de MONTI (administrador, profesor o alumno)."}
         </p>
         {showGoogle ? (
           <div className="stack" style={{ marginBottom: "1rem" }}>
-            <button type="button" disabled={busy} onClick={startGoogle}>
+            <button type="button" disabled={busy} onClick={() => void startGoogle()}>
               {busy ? "Conectando…" : "Continuar con Google"}
             </button>
             <p className="field-hint">
               MONTI no guarda contraseñas del colegio. Debes estar en el roster
-              del piloto.
+              del piloto. Usa http://localhost:5173 (no 127.0.0.1).
             </p>
           </div>
         ) : null}
