@@ -15,6 +15,18 @@ def school_auth_enabled() -> bool:
     return os.getenv('MONTI_FEATURE_SCHOOL_AUTH', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
+def google_login_configured() -> bool:
+    from .google_bridge import google_login_enabled
+
+    return google_login_enabled()
+
+
+def google_allowed_domain() -> str:
+    from .google_bridge import allowed_google_domain
+
+    return allowed_google_domain()
+
+
 def normalize_login(login: str) -> str:
     return login.strip().lower()
 
@@ -140,8 +152,10 @@ def user_public(user: User) -> dict:
     return {
         'id': user.id,
         'login': user.login,
+        'email': getattr(user, 'email', None),
         'display_name': user.display_name,
         'role': user.role,
+        'auth_provider': getattr(user, 'auth_provider', 'local'),
     }
 
 

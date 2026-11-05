@@ -15,6 +15,8 @@ from .physics import efficiency, solve
 from .schemas import EventBatch, Explanation, JoinRequest, LabRequest, LaunchState, Submission, TeacherReview
 from .auth.deps import (
     bearer_token,
+    google_allowed_domain,
+    google_login_configured,
     require_teacher_subject,
     school_auth_enabled,
     teacher_subject_ids,
@@ -110,10 +112,13 @@ def create_app(database_url=None):
     @app.get('/api/health')
     def health():
         enabled = school_auth_enabled()
+        google_on = google_login_configured()
         return {
             'status': 'ok',
             'mode': 'school-auth' if enabled else 'local-prototype',
             'school_auth': enabled,
+            'google_login': google_on,
+            'google_allowed_domain': google_allowed_domain() if google_on or enabled else None,
             'rag': False,
             'generative_tutor': False,
             'voice': 'browser',

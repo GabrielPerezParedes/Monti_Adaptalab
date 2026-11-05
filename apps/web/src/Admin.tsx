@@ -18,6 +18,15 @@ type Enrollment = {
   subject_id: string;
   is_active: boolean;
 };
+type RosterRow = {
+  id: string;
+  email: string;
+  role: string;
+  display_name: string | null;
+  grade_id: string | null;
+  subject_id: string | null;
+  active: boolean;
+};
 
 export default function Admin() {
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -25,6 +34,7 @@ export default function Admin() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [roster, setRoster] = useState<RosterRow[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -42,21 +52,33 @@ export default function Admin() {
     grade_id: "",
     subject_id: "",
   });
+  const [rosterForm, setRosterForm] = useState({
+    email: "",
+    role: "student",
+    display_name: "",
+    grade_id: "",
+    subject_id: "",
+  });
+  const [rosterCsv, setRosterCsv] = useState(
+    "email,role,display_name,grade_id,subject_id,active\n",
+  );
 
   const refresh = useCallback(async () => {
     try {
-      const [u, g, s, a, e] = await Promise.all([
+      const [u, g, s, a, e, r] = await Promise.all([
         api<UserRow[]>("/admin/users"),
         api<Grade[]>("/admin/grades"),
         api<Subject[]>("/admin/subjects"),
         api<Assignment[]>("/admin/teacher-assignments"),
         api<Enrollment[]>("/admin/enrollments"),
+        api<RosterRow[]>("/admin/roster"),
       ]);
       setUsers(u);
       setGrades(g);
       setSubjects(s);
       setAssignments(a);
       setEnrollments(e);
+      setRoster(r);
       setError("");
     } catch (err) {
       setError((err as Error).message);
@@ -100,8 +122,8 @@ export default function Admin() {
           <h1>Administración escolar</h1>
         </div>
         <p className="field-hint">
-          Gestiona usuarios, grados, asignaturas, asignaciones docentes y
-          matrículas.
+          Gestiona usuarios, roster Google (sin contraseñas), grados,
+          asignaturas, asignaciones docentes y matrículas.
         </p>
         {error ? (
           <p className="notice error" role="alert">
@@ -163,6 +185,156 @@ export default function Admin() {
               {u.is_active ? "activo" : "inactivo"}{" "}
               <button className="secondary" type="button" onClick={() => toggleUser(u)}>
                 {u.is_active ? "Desactivar" : "Activar"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="panel">
+        <h2>Roster piloto (Google)</h2>
+        <p className="field-hint">
+          Solo emails institucionales. Prohibido importar columnas de
+          contraseña/clave/secret.
+        </p>
+        <form
+          className="stack"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            try {
+              await api(
+                "/admin/roster",
+                post({
+                  email: rosterForm.email,
+                  role: rosterForm.role,
+                  display_name: rosterForm.display_name || null,
+                  grade_id: rosterForm.grade_id || null,
+                  subject_id: rosterForm.subject_id || null,
+                  active: true,
+                }),
+              );
+              setRosterForm({
+                email: "",
+                role: "student",
+                display_name: "",
+                grade_id: "",
+                subject_id: "",
+              });
+              await refresh();
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <label>
+            Email
+            <input
+              value={rosterForm.email}
+              onChange={(e) => setRosterForm({ ...rosterForm, email: e.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Rol
+            <select
+              value={rosterForm.role}
+              onChange={(e) => setRosterForm({ ...rosterForm, role: e.target.value })}
+            >
+              <option value="student">Alumno</option>
+              <option value="teacher">Profesor</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </label>
+          <label>
+            Nombre
+            <input
+              value={rosterForm.display_name}
+              onChange={(e) =>
+                setRosterForm({ ...rosterForm, display_name: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            Grado (id)
+            <select
+              value={rosterForm.grade_id}
+              onChange={(e) => setRosterForm({ ...rosterForm, grade_id: e.target.value })}
+            >
+              <option value="">—</option>
+              {grades.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Asignatura (id)
+            <select
+              value={rosterForm.subject_id}
+              onChange={(e) =>
+                setRosterForm({ ...rosterForm, subject_id: e.target.value })
+              }
+            >
+              <option value="">—</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button disabled={busy}>Añadir al roster</button>
+        </form>
+        <label>
+          Importar CSV
+          <textarea
+            rows={4}
+            value={rosterCsv}
+            onChange={(e) => setRosterCsv(e.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await api("/admin/roster/import-csv", post({ csv_text: rosterCsv }));
+              await refresh();
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Importar CSV
+        </button>
+        <ul className="plain-list">
+          {roster.map((row) => (
+            <li key={row.id}>
+              <strong>{row.email}</strong> · {row.role} ·{" "}
+              {row.active ? "activo" : "inactivo"}{" "}
+              <button
+                className="secondary"
+                type="button"
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await api(`/admin/roster/${row.id}`, patch({ active: !row.active }));
+                    await refresh();
+                  } catch (err) {
+                    setError((err as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {row.active ? "Desactivar" : "Activar"}
               </button>
             </li>
           ))}

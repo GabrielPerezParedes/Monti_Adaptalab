@@ -4,8 +4,10 @@ Base de implementación del proyecto de grado **Laboratorios Virtuales Web con A
 
 Primer tema: **movimiento parabólico, 4.º de secundaria, Colegio Montessori de Sucre**. Integra el código público de **PhET Projectile Motion** con preparación docente, registro de interacciones y verificación física independiente.
 
-**Estado: primer hito técnico, para pruebas locales con datos de ejemplo.** El generador es paramétrico y MONTI presenta preguntas por reglas. Incluye un personaje provisional animado y movible, dictado y lectura de preguntas con la voz del navegador. Todavía no hay RAG, evaluación con un modelo de lenguaje, voz generativa ni autenticación escolar. La meta del piloto sigue siendo un curso de 30 estudiantes; esa concurrencia aún no está validada.
+**Estado: primer hito técnico, para pruebas locales con datos de ejemplo.** El generador es paramétrico y MONTI presenta preguntas por reglas. Incluye un personaje provisional animado y movible, dictado y lectura de preguntas con la voz del navegador. Todavía no hay RAG, evaluación con un modelo de lenguaje ni voz generativa. Hay autenticación escolar **local** (prototipo) y camino **Google Workspace** (`@montessorisucre.edu.bo` vía Supabase Auth + roster sin contraseñas) — ver [`docs/runbook-google-workspace.md`](docs/runbook-google-workspace.md). La meta del piloto sigue siendo ~30 estudiantes; esa concurrencia aún no está validada.
 
+**Alcance técnico del MVP (canónico):** [`docs/alcance-mvp.md`](docs/alcance-mvp.md).  
+**Identidad aula:** [`docs/runbook-google-workspace.md`](docs/runbook-google-workspace.md) · evidencia [`docs/validacion-google-005.md`](docs/validacion-google-005.md).  
 Lee `docs/version-1.1.0.md` para actualizar una instalación existente y probar el acceso y la voz.
 
 ## Qué puedes ejecutar
@@ -31,7 +33,7 @@ En esta versión se generan parámetros y se configura la escena existente de Ph
 | Bibliografía | Referencias de RACSO y convenciones físicas | Ingesta revisada, fragmentos con página, pgvector |
 | Tutor | Personaje animado, dictado, voz del navegador y preguntas por reglas | RAG, diálogo con IA, voz y animación |
 
-SQLite permite empezar sin cuentas externas. La decisión de utilizar PostgreSQL/Supabase para el producto escolar se mantiene. La API permite configurar una conexión PostgreSQL; esa conexión no se ha probado en este hito.
+SQLite permite empezar sin cuentas externas. El login Google del aula usa Supabase Auth como IdP y sesión Bearer MONTI; PostgreSQL/RLS de producción siguen pendientes. La API permite configurar una conexión PostgreSQL; esa conexión no se ha probado en este hito. `MONTI_DEV_TEACHER_KEY` no es necesaria cuando el camino de aula es Google + roster.
 
 ## Instalación
 

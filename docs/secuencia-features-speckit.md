@@ -143,13 +143,14 @@ Oleada F  Piloto, carga y defensa
 
 | | |
 |---|---|
-| **Estado** | `pendiente` |
+| **Estado** | `parcial` — slice **local** (`specs/001-school-auth-roles`) + **IdP Google** (`specs/005-google-workspace-login`: Supabase Auth Google + roster sin contraseñas). Falta Postgres de producción, RLS e HTTPS de aula |
 | **Objetivo** | Sustituir clave docente de desarrollo y SQLite local por identidad escolar |
 | **Entrega** | Supabase Auth; roles docente/estudiante; PostgreSQL; migraciones; RLS por curso; HTTPS en entorno piloto; retiro de `MONTI_DEV_TEACHER_KEY` del flujo de aula |
 | **Depende de** | 001 |
 | **Bloquea a** | 005, 006, 012, 013 |
 | **Comando** | `/speckit-specify` |
 | **Criterio de cierre** | Estudiante no ve borradores ni intentos ajenos; docente solo su curso; health/mode ya no es solo `local-prototype` para el despliegue piloto |
+| **Speckit ya implementado** | `specs/001-school-auth-roles/` + `specs/005-google-workspace-login/` — `docs/validacion-auth-001.md`, `docs/validacion-google-005.md`, `docs/runbook-google-workspace.md` |
 
 #### `005-modelo-datos-academico-y-auditoria`
 
@@ -369,9 +370,13 @@ Para **cada** ID `00N-…`:
 
 ## 10. Qué hacer ahora (siguiente acción recomendada)
 
-1. Ejecutar **`/speckit-specify`** para `001-alcance-mvp-y-reconciliacion-perfil` usando este documento como input.
-2. En paralelo operativo (fuera de código): agendar con la profesora la sesión de **`003`** (rúbrica y política).
-3. No abrir `006+` hasta tener 001+003 cerradas y 004 al menos especificada.
+> **Numeración del repo vs backlog canónico.** `specs/001-school-auth-roles/` = slice local Oleada B. `specs/002-alcance-mvp-…` = ítem canónico alcance (**hecho** → [`alcance-mvp.md`](./alcance-mvp.md)).
+
+1. **Hecho:** auth local + alcance MVP + cierre visual + **login Google Workspace** (`specs/005-google-workspace-login/`).
+2. **Siguiente:** resto Oleada B (Postgres/RLS/HTTPS); OAuth real 1–2 cuentas vía runbook; merge de `004` (rúbrica) si aún abierto.
+3. No abrir RAG (`006+` canónico) hasta haber podido entrar con cuenta institucional en demo.
+
+Ver guía operativa: `docs/continuar-speckit.md`.
 
 ---
 
@@ -385,6 +390,11 @@ Para **cada** ID `00N-…`:
 | `docs/plan-desarrollo.md` | Hitos 1–7 (esta secuencia los concreta en features) |
 | `docs/arquitectura.md` | Frontera servidor/cliente y eventos |
 | `docs/validacion.md` | Checklist técnico del hito 1 |
+| `docs/validacion-auth-001.md` | Cierre quickstart auth local (`001-school-auth-roles`) |
+| `docs/validacion-google-005.md` | Cierre quickstart Google Workspace (`005`) |
+| `docs/runbook-google-workspace.md` | Operación OAuth Google + Supabase + roster |
+| `docs/continuar-speckit.md` | Guía operativa: qué Speckit ejecutar ahora |
+| `docs/alcance-mvp.md` | Alcance técnico canónico del MVP |
 | `README.md` | Estado real 1.1.0 |
 
 ---
