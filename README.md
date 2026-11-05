@@ -4,8 +4,9 @@ Base de implementación del proyecto de grado **Laboratorios Virtuales Web con A
 
 Primer tema: **movimiento parabólico, 4.º de secundaria, Colegio Montessori de Sucre**. Integra el código público de **PhET Projectile Motion** con preparación docente, registro de interacciones y verificación física independiente.
 
-**Estado: primer hito técnico, para pruebas locales con datos de ejemplo.** El generador es paramétrico y MONTI presenta preguntas por reglas. Incluye un personaje provisional animado y movible, dictado y lectura de preguntas con la voz del navegador. Todavía no hay RAG, evaluación con un modelo de lenguaje, voz generativa ni autenticación escolar. La meta del piloto sigue siendo un curso de 30 estudiantes; esa concurrencia aún no está validada.
+**Estado: primer hito técnico, para pruebas locales con datos de ejemplo.** El generador es paramétrico y MONTI presenta preguntas por reglas. Incluye un personaje provisional animado y movible, dictado y lectura de preguntas con la voz del navegador. Todavía no hay RAG, evaluación con un modelo de lenguaje ni voz generativa. Hay autenticación escolar **local** (prototipo); el piloto de aula usará cuentas del colegio — ver alcance. La meta del piloto sigue siendo ~30 estudiantes; esa concurrencia aún no está validada.
 
+**Alcance técnico del MVP (canónico):** [`docs/alcance-mvp.md`](docs/alcance-mvp.md).  
 Lee `docs/version-1.1.0.md` para actualizar una instalación existente y probar el acceso y la voz.
 
 ## Qué puedes ejecutar
@@ -15,21 +16,23 @@ Lee `docs/version-1.1.0.md` para actualizar una instalación existente y probar 
 3. La aplicación configura la pantalla Intro de PhET: ángulo, rapidez, altura, objetivo, gravedad y controles habilitados.
 4. PhET emite ajustes, lanzamientos, aterrizajes, borrados, reinicios, mediciones y cambios de visualización. El navegador conserva una cola pendiente y el servidor evita duplicar eventos reenviados.
 5. El estudiante explora, inicia evaluación, explica su razonamiento y entrega un lanzamiento finalizado.
-6. El servidor calcula resultado físico y eficiencia. La profesora revisa procedimiento y comprensión con las acciones y explicaciones a la vista.
-7. Ambos pueden descargar resúmenes de texto con condiciones, resultado y puntuación.
+6. El servidor emite los cuatro puntajes (procedimiento, comprensión, resultado físico, evidencia de aprendizaje) con evidencia inspectable. La profesora carga ese puntaje a sus registros (casilla Saber).
+7. Ambos pueden descargar el informe por alumno con condiciones, resultado y puntuación.
 
 En esta versión se generan parámetros y se configura la escena existente de PhET. **No se generan nuevos componentes gráficos ni código de simulación mediante IA**. La integración completa descrita en el proyecto de grado se desarrolla en los siguientes hitos.
 
 ## Tecnologías
 
-| Parte | Esta base | Siguiente integración prevista |
-|---|---|---|
-| Web | React 19, TypeScript, Vite | Diseño definitivo de MONTI y diálogo accesible |
-| Servidor | Python 3.12, FastAPI, Pydantic | Orquestación de generación y evaluación |
-| Simulación | PhET Projectile Motion, `adapted-from-phet` | Actividades validadas del tema acordado |
-| Persistencia | SQLAlchemy y SQLite local | PostgreSQL, Supabase Auth y migraciones |
-| Bibliografía | Referencias de RACSO y convenciones físicas | Ingesta revisada, fragmentos con página, pgvector |
-| Tutor | Personaje animado, dictado, voz del navegador y preguntas por reglas | RAG, diálogo con IA, voz y animación |
+
+| Parte        | Esta base                                                            | Siguiente integración prevista                    |
+| ------------ | -------------------------------------------------------------------- | ------------------------------------------------- |
+| Web          | React 19, TypeScript, Vite                                           | Diseño definitivo de MONTI y diálogo accesible    |
+| Servidor     | Python 3.12, FastAPI, Pydantic                                       | Orquestación de generación y evaluación           |
+| Simulación   | PhET Projectile Motion, `adapted-from-phet`                          | Actividades validadas del tema acordado           |
+| Persistencia | SQLAlchemy y SQLite local                                            | PostgreSQL, Supabase Auth y migraciones           |
+| Bibliografía | Referencias de RACSO y convenciones físicas                          | Ingesta revisada, fragmentos con página, pgvector |
+| Tutor        | Personaje animado, dictado, voz del navegador y preguntas por reglas | RAG, diálogo con IA, voz y animación              |
+
 
 SQLite permite empezar sin cuentas externas. La decisión de utilizar PostgreSQL/Supabase para el producto escolar se mantiene. La API permite configurar una conexión PostgreSQL; esa conexión no se ha probado en este hito.
 
@@ -108,33 +111,37 @@ La clave docente predeterminada es pública y solo identifica el flujo de desarr
 
 ## Evaluación sobre 45 puntos
 
-| Criterio | Máximo | Implementación actual |
-|---|---:|---|
-| Procedimiento técnico | 18 | Revisión docente de las acciones |
-| Comprensión y justificación | 14 | Revisión docente de las explicaciones |
-| Resultado físico | 9 | Cálculo independiente del servidor |
-| Eficiencia e intentos | 4 | Fallos y reinicios computables |
 
-Un criterio sin revisar figura **pendiente**. El total aparece al valorar los cuatro criterios. Las revisiones se conservan: nueva evidencia deja la revisión anterior en el historial y requiere valorar la evidencia actual.
+| Criterio                    | Máximo | Implementación actual                                      |
+| --------------------------- | ------ | ---------------------------------------------------------- |
+| Procedimiento               | 18     | Reglas sobre telemetría PhET (acta `45-v1`)                 |
+| Comprensión                 | 14     | Reglas sobre explicación/diálogo confirmado                |
+| Resultado físico            | 9      | Cálculo independiente del servidor                         |
+| Evidencia de aprendizaje    | 4      | `E(n)` + historial; fallos técnicos exentos                |
+
+
+Un criterio sin valor figura **pendiente**. El total aparece cuando los cuatro criterios tienen valor. El informe por alumno está pensado para **cargar a registros** (casilla Saber); Ser/Hacer se contrastan fuera del lab. Acta: [`docs/acta-rubrica-profesora.md`](docs/acta-rubrica-profesora.md).
 
 Convenciones: SI, `g = 10 m/s²`, sin resistencia del aire, llegada al suelo `y = 0`, tolerancia `±0,5 m`. El generador conserva una solución testigo en el servidor para garantizar un objetivo alcanzable.
 
-Política provisional: exploración libre; en evaluación, una entrega fallida o el borrado/reinicio de un lanzamiento sin entregar cuenta una vez por lanzamiento. Un fallo ya entregado no vuelve a penalizarse al reiniciar. `E(n) = max(0, 4 − 0,25 n(n + 1))`: 4; 3,5; 2,5; 1; 0. La profesora debe validar esta política, las tolerancias y los indicadores pedagógicos.
+Política `1.0`: exploración libre; en evaluación, una entrega fallida o el borrado/reinicio de un lanzamiento sin entregar cuenta una vez por lanzamiento. Un fallo ya entregado no vuelve a penalizarse al reiniciar. `E(n) = max(0, 4 − 0,25 n(n + 1))`: 4; 3,5; 2,5; 1; 0.
 
 ## Organización
 
-| Ruta | Contenido |
-|---|---|
-| `apps/web/src/App.tsx` | Páginas docente y estudiante |
-| `apps/web/src/PhETLab.tsx` | Contenedor y comunicación con PhET |
-| `apps/api/monti/main.py` | API, eventos, revisión y reportes |
-| `apps/api/monti/generation.py` | Generación paramétrica reproducible |
-| `apps/api/monti/physics.py` | Verificador físico y eficiencia |
-| `apps/api/monti/schemas.py` | Contratos y validación |
-| `apps/api/monti/database.py` | Persistencia de actividades y evidencias |
-| `integrations/phet/` | Adaptador, fuentes fijadas, parches y pruebas |
-| `scripts/setup_phet.py` | Preparación reproducible de PhET |
-| `docs/` | Arquitectura, entrega, validación y siguientes hitos |
+
+| Ruta                           | Contenido                                            |
+| ------------------------------ | ---------------------------------------------------- |
+| `apps/web/src/App.tsx`         | Páginas docente y estudiante                         |
+| `apps/web/src/PhETLab.tsx`     | Contenedor y comunicación con PhET                   |
+| `apps/api/monti/main.py`       | API, eventos, revisión y reportes                    |
+| `apps/api/monti/generation.py` | Generación paramétrica reproducible                  |
+| `apps/api/monti/physics.py`    | Verificador físico y evidencia de aprendizaje `E(n)` |
+| `apps/api/monti/schemas.py`    | Contratos y validación                               |
+| `apps/api/monti/database.py`   | Persistencia de actividades y evidencias             |
+| `integrations/phet/`           | Adaptador, fuentes fijadas, parches y pruebas        |
+| `scripts/setup_phet.py`        | Preparación reproducible de PhET                     |
+| `docs/`                        | Arquitectura, entrega, validación y siguientes hitos |
+
 
 No subas dependencias instaladas, `.env`, bases de datos, compilaciones ni el PDF completo de la bibliografía. Las carpetas generadas están excluidas del control de versiones.
 
@@ -144,7 +151,7 @@ Desde la raíz:
 
 ```bash
 npm run build
-npm run test:bridge
+npm run test:bridge 
 ```
 
 Desde `apps/api`, Windows:
