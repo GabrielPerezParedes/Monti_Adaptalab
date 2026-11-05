@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..database import (
     Enrollment,
     Grade,
+    PilotRoster,
     Subject,
     TeacherSubjectAssignment,
     User,
@@ -33,6 +34,12 @@ from .deps import (
     teacher_subject_ids,
     throttle_key,
     user_public,
+)
+from .google_bridge import (
+    complete_google_login,
+    google_login_enabled,
+    normalize_email,
+    validate_roster_headers,
 )
 from .passwords import hash_password, verify_password
 from .sessions import create_session, record_event, revoke_session, revoke_user_sessions
@@ -96,6 +103,31 @@ class EnrollmentPatch(StrictModel):
     is_active: bool | None = None
 
 
+class GoogleLoginBody(StrictModel):
+    access_token: str = Field(min_length=10, max_length=8000)
+
+
+class RosterBody(StrictModel):
+    email: str = Field(min_length=3, max_length=120)
+    role: str = Field(pattern='^(admin|teacher|student)$')
+    display_name: str | None = Field(default=None, max_length=120)
+    grade_id: str | None = Field(default=None, max_length=36)
+    subject_id: str | None = Field(default=None, max_length=36)
+    active: bool = True
+
+
+class RosterPatch(StrictModel):
+    role: str | None = Field(default=None, pattern='^(admin|teacher|student)$')
+    display_name: str | None = Field(default=None, max_length=120)
+    grade_id: str | None = Field(default=None, max_length=36)
+    subject_id: str | None = Field(default=None, max_length=36)
+    active: bool | None = None
+
+
+class RosterCsvBody(StrictModel):
+    csv_text: str = Field(min_length=1, max_length=200_000)
+
+
 def get_db(request: Request):
     with request.app.state.session_factory() as session:
         try:
@@ -121,7 +153,8 @@ def create_auth_router() -> APIRouter:
                 content={'detail': 'Demasiados intentos. Espera e inténtalo de nuevo.', 'retry_after_seconds': wait},
             )
         user = session.scalar(select(User).where(User.login == login_norm))
-        if not user or not user.is_active or not verify_password(body.password, user.password_hash):
+        password_ok = bool(user and user.password_hash and verify_password(body.password, user.password_hash))
+        if not user or not user.is_active or not password_ok:
             wait = register_failure(session, key)
             record_event(session, event_type='login_failure', user_id=user.id if user else None, login_attempted=login_norm)
             if wait:
@@ -162,6 +195,142 @@ def create_auth_router() -> APIRouter:
     @router.get('/api/auth/me')
     def me(request: Request, user: User = Depends(current_user), session: Session = Depends(get_db)):
         return {**user_public(user), 'scope': build_scope(session, user)}
+
+    @router.post('/api/auth/google')
+    def google_login(body: GoogleLoginBody, request: Request, session: Session = Depends(get_db)):
+        if not google_login_enabled():
+            raise HTTPException(503, 'Login Google deshabilitado.')
+        if not school_auth_enabled():
+            raise HTTPException(503, 'Activa MONTI_FEATURE_SCHOOL_AUTH para usar identidad escolar.')
+        user = complete_google_login(session, body.access_token)
+        ip = request.client.host if request.client else None
+        token, auth_session = create_session(
+            session,
+            user,
+            ttl_minutes=session_ttl_minutes(),
+            user_agent=request.headers.get('user-agent'),
+            ip_hint=ip,
+        )
+        record_event(
+            session,
+            event_type='google_login_success',
+            user_id=user.id,
+            login_attempted=user.email or user.login,
+        )
+        return {
+            'token': token,
+            'expires_at': auth_session.expires_at.isoformat(),
+            'user': user_public(user),
+        }
+
+    def _roster_public(row: PilotRoster) -> dict:
+        return {
+            'id': row.id,
+            'email': row.email,
+            'role': row.role,
+            'display_name': row.display_name,
+            'grade_id': row.grade_id,
+            'subject_id': row.subject_id,
+            'active': row.active,
+            'updated_at': row.updated_at.isoformat() if row.updated_at else None,
+        }
+
+    @router.get('/api/admin/roster')
+    def list_roster(
+        user: User = Depends(require_roles('admin')),
+        session: Session = Depends(get_db),
+    ):
+        rows = list(session.scalars(select(PilotRoster).order_by(PilotRoster.email)))
+        return [_roster_public(r) for r in rows]
+
+    @router.post('/api/admin/roster', status_code=201)
+    def create_roster(
+        body: RosterBody,
+        user: User = Depends(require_roles('admin')),
+        session: Session = Depends(get_db),
+    ):
+        email = normalize_email(body.email)
+        if '@' not in email:
+            raise HTTPException(422, 'Email no válido.')
+        row = PilotRoster(
+            id=str(uuid4()),
+            email=email,
+            role=body.role,
+            display_name=body.display_name,
+            grade_id=body.grade_id,
+            subject_id=body.subject_id,
+            active=body.active,
+        )
+        session.add(row)
+        session.commit()
+        return _roster_public(row)
+
+    @router.patch('/api/admin/roster/{roster_id}')
+    def patch_roster(
+        roster_id: str,
+        body: RosterPatch,
+        user: User = Depends(require_roles('admin')),
+        session: Session = Depends(get_db),
+    ):
+        row = session.get(PilotRoster, roster_id)
+        if not row:
+            raise HTTPException(404, 'Fila de roster no encontrada.')
+        data = body.model_dump(exclude_unset=True)
+        for key, value in data.items():
+            setattr(row, key, value)
+        row.updated_at = now()
+        session.commit()
+        return _roster_public(row)
+
+    @router.post('/api/admin/roster/import-csv')
+    def import_roster_csv(
+        body: RosterCsvBody,
+        user: User = Depends(require_roles('admin')),
+        session: Session = Depends(get_db),
+    ):
+        import csv
+        from io import StringIO
+
+        reader = csv.DictReader(StringIO(body.csv_text))
+        if not reader.fieldnames:
+            raise HTTPException(422, 'CSV vacío o sin cabecera.')
+        validate_roster_headers(list(reader.fieldnames))
+        required = {'email', 'role'}
+        headers = {h.strip().lower() for h in reader.fieldnames}
+        if not required.issubset(headers):
+            raise HTTPException(422, 'CSV requiere columnas email y role.')
+        created = updated = 0
+        for raw in reader:
+            row_map = {k.strip().lower(): (v or '').strip() for k, v in raw.items() if k}
+            email = normalize_email(row_map.get('email', ''))
+            role = row_map.get('role', '')
+            if not email or role not in {'admin', 'teacher', 'student'}:
+                raise HTTPException(422, f'Fila inválida: {raw}')
+            active = row_map.get('active', 'true').lower() not in {'0', 'false', 'no', 'off'}
+            existing = session.scalar(select(PilotRoster).where(PilotRoster.email == email))
+            if existing:
+                existing.role = role
+                existing.display_name = row_map.get('display_name') or existing.display_name
+                existing.grade_id = row_map.get('grade_id') or None
+                existing.subject_id = row_map.get('subject_id') or None
+                existing.active = active
+                existing.updated_at = now()
+                updated += 1
+            else:
+                session.add(
+                    PilotRoster(
+                        id=str(uuid4()),
+                        email=email,
+                        role=role,
+                        display_name=row_map.get('display_name') or None,
+                        grade_id=row_map.get('grade_id') or None,
+                        subject_id=row_map.get('subject_id') or None,
+                        active=active,
+                    )
+                )
+                created += 1
+        session.commit()
+        return {'created': created, 'updated': updated}
 
     @router.get('/api/student/enrollments')
     def my_enrollments(user: User = Depends(require_roles('student', 'admin')), session: Session = Depends(get_db)):

@@ -5,8 +5,10 @@ const SESSION_KEY = "monti.session";
 export type SessionUser = {
   id: string;
   login: string;
+  email?: string | null;
   display_name: string;
   role: "admin" | "teacher" | "student";
+  auth_provider?: string;
 };
 
 export type StoredSession = {

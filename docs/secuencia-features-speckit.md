@@ -143,14 +143,16 @@ Oleada F  Piloto, carga y defensa
 
 | | |
 |---|---|
-| **Estado** | `parcial` — slice **local** hecho en `specs/001-school-auth-roles` (SQLite + auth first-party + roles/grados/asignaturas). Falta IdP Supabase, Postgres de producción, RLS e HTTPS de aula |
+| **Estado** | `parcial` — slice **local** (`specs/001-school-auth-roles`) + **IdP Google** (`specs/005-google-workspace-login`: Firebase Auth Google + roster sin contraseñas). Falta Postgres de producción, RLS e HTTPS de aula |
+
 | **Objetivo** | Sustituir clave docente de desarrollo y SQLite local por identidad escolar |
 | **Entrega** | Supabase Auth; roles docente/estudiante; PostgreSQL; migraciones; RLS por curso; HTTPS en entorno piloto; retiro de `MONTI_DEV_TEACHER_KEY` del flujo de aula |
 | **Depende de** | 001 (alcance) |
 | **Bloquea a** | 005, 006, 012, 013 |
 | **Comando** | `/speckit-specify` (nueva feature; **no** reabrir `001-school-auth-roles` salvo bugs) |
 | **Criterio de cierre** | Estudiante no ve borradores ni intentos ajenos; docente solo su curso; health/mode ya no es solo `local-prototype` para el despliegue piloto |
-| **Speckit ya implementado** | `specs/001-school-auth-roles/` — validación en `docs/validacion-auth-001.md` |
+| **Speckit ya implementado** | `specs/001-school-auth-roles/` + `specs/005-google-workspace-login/` — `docs/validacion-auth-001.md`, `docs/validacion-google-005.md`, `docs/runbook-google-workspace.md` |
+
 
 #### `005-modelo-datos-academico-y-auditoria`
 
@@ -372,9 +374,10 @@ Para **cada** ID `00N-…`:
 
 > **Numeración del repo vs backlog canónico.** `specs/001-school-auth-roles/` = slice local Oleada B. `specs/002-alcance-mvp-…` = ítem canónico alcance (**hecho** → [`alcance-mvp.md`](./alcance-mvp.md)).
 
-1. **Hecho:** auth local + alcance MVP + cierre visual + **rúbrica `45-v1`** (`docs/acta-rubrica-profesora.md`).
-2. **Siguiente:** identidad de producción (resto Oleada B / Supabase) — carpeta sugerida `specs/005-…`.
-3. No abrir RAG (`006+` canónico) hasta identidad de producción al menos especificada.
+1. **Hecho:** auth local + alcance MVP + cierre visual + **rúbrica `45-v1`** + **login Google Workspace** (`specs/005-google-workspace-login/`).
+2. **Siguiente:** resto Oleada B (Postgres/RLS/HTTPS); OAuth real residual vía runbook.
+3. No abrir RAG (`006+` canónico) hasta haber podido entrar con cuenta institucional en demo.
+
 
 Ver guía operativa: `docs/continuar-speckit.md`.
 
@@ -391,6 +394,9 @@ Ver guía operativa: `docs/continuar-speckit.md`.
 | `docs/arquitectura.md` | Frontera servidor/cliente y eventos |
 | `docs/validacion.md` | Checklist técnico del hito 1 |
 | `docs/validacion-auth-001.md` | Cierre quickstart auth local (`001-school-auth-roles`) |
+| `docs/validacion-google-005.md` | Cierre quickstart Google Workspace (`005`) |
+| `docs/runbook-google-workspace.md` | Operación OAuth Google + Firebase + roster |
+
 | `docs/continuar-speckit.md` | Guía operativa: qué Speckit ejecutar ahora |
 | `docs/alcance-mvp.md` | Alcance técnico canónico del MVP |
 | `README.md` | Estado real 1.1.0 |

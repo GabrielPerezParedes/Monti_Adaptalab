@@ -88,11 +88,28 @@ class User(Base):
     login: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(120))
     role: Mapped[str] = mapped_column(String(20))  # admin | teacher | student
-    password_hash: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True, index=True)
+    google_sub: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True, index=True)
+    auth_provider: Mapped[str] = mapped_column(String(20), default='local')  # local | google
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PilotRoster(Base):
+    """Allowlist for Google Workspace pilot (no passwords)."""
+
+    __tablename__ = 'pilot_roster'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    email: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    role: Mapped[str] = mapped_column(String(20))  # admin | teacher | student
+    display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    grade_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('grades.id'), nullable=True)
+    subject_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('subjects.id'), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
 class AuthSession(Base):

@@ -16,8 +16,11 @@ from .scoring import score_comprehension, score_procedure
 from .schemas import EventBatch, Explanation, JoinRequest, LabRequest, LaunchState, Submission, TeacherReview
 from .auth.deps import (
     bearer_token,
+    google_allowed_domain,
+    google_login_configured,
     require_teacher_subject,
     school_auth_enabled,
+    resolve_teacher_subject,
     teacher_subject_ids,
 )
 from .auth.router import create_auth_router
@@ -124,10 +127,13 @@ def create_app(database_url=None):
     @app.get('/api/health')
     def health():
         enabled = school_auth_enabled()
+        google_on = google_login_configured()
         return {
             'status': 'ok',
             'mode': 'school-auth' if enabled else 'local-prototype',
             'school_auth': enabled,
+            'google_login': google_on,
+            'google_allowed_domain': google_allowed_domain() if google_on or enabled else None,
             'rag': False,
             'generative_tutor': False,
             'voice': 'browser',
@@ -144,13 +150,14 @@ def create_app(database_url=None):
 
     @app.post('/api/teacher/labs', status_code=201)
     def new_lab(request: LabRequest, session=Depends(db), actor: User | None = Depends(teacher_user)):
+        subject_id = request.subject_id
         if school_auth_enabled() and actor and actor.role == 'teacher':
-            require_teacher_subject(session, actor, request.subject_id)
+            subject_id = resolve_teacher_subject(session, actor, request.subject_id)
         lab = Lab(
             id=uuid4().hex[:10],
             data=generate(request),
             grade_id=request.grade_id,
-            subject_id=request.subject_id,
+            subject_id=subject_id,
         )
         session.add(lab)
         session.commit()
