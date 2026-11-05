@@ -80,8 +80,9 @@ En el aula, eso permite **acompañar, guiar y evaluar en paralelo** a muchos est
 | Rúbrica 45 + informe MONTI | **Hecho** (`45-v1`) | Acta cerrada; carga a registros sin override obligatorio |
 | Preguntas por reglas + voz navegador | **Hecho** (prototipo) | No es tutor LLM ni voz generativa |
 | Auth escolar local (roles, grados, asignaturas) | **Hecho (prototipo)** | `specs/001-school-auth-roles/`; flag `school_auth`; **no** es IdP del colegio |
-| Login Google Workspace + roster (sin contraseñas) | **Hecho (código)** | `specs/005-google-workspace-login/`; Supabase Auth Google → sesión MONTI; dominio `montessorisucre.edu.bo`; OAuth real = residual runbook |
+| Login Google Workspace + roster (sin contraseñas) | **Hecho (código)** | `specs/005-google-workspace-login/`; Firebase Auth Google → sesión MONTI; dominio `montessorisucre.edu.bo`; OAuth real = residual runbook |
 | Postgres/RLS/HTTPS de aula | **Pendiente** | Resto Oleada B canónica `004` |
+
 | RAG + LabSpec desde bibliografía | **Pendiente** | Banderas `rag` en falso hasta entonces |
 | Tutor LLM socrático | **Pendiente** | Tras corpus + rúbrica aceptada |
 | Voz generativa de proveedor | **Pendiente** | Tras tutor de texto; `generative_voice` en falso |
@@ -111,7 +112,8 @@ En el aula, eso permite **acompañar, guiar y evaluar en paralelo** a muchos est
 | Agente socrático + voz | `008`–`010` |
 | Validar con piloto | `012`–`013` (~30 sesiones) |
 
-**Auth:** `specs/001-school-auth-roles/` (local) + `specs/005-google-workspace-login/` (IdP Google vía Supabase Auth + roster) = avance de Oleada B / canónico `004`. Falta Postgres de producción, RLS e HTTPS de aula.
+**Auth:** `specs/001-school-auth-roles/` (local) + `specs/005-google-workspace-login/` (IdP Google vía Firebase Auth + roster) = avance de Oleada B / canónico `004`. Falta Postgres de producción, RLS e HTTPS de aula.
+
 
 **Orden:** RAG / tutor LLM **después** de rúbrica aceptada y corpus; no marcarlos hechos mientras las banderas de health estén en falso.
 
@@ -123,10 +125,11 @@ En el aula, eso permite **acompañar, guiar y evaluar en paralelo** a muchos est
 |------|----------|
 | Meta de diseño | **~30** sesiones de estudiante (carga, demos, narrativa) |
 | Logística | El colegio confirma fechas/cupo sin invalidar la meta de planificación |
-| Cuentas en el aula | **Institucionales** `@montessorisucre.edu.bo` vía Google Workspace + Supabase Auth (`005`) |
+| Cuentas en el aula | **Institucionales** `@montessorisucre.edu.bo` vía Google Workspace + Firebase Auth (`005`) |
 | Auth local (`001-school-auth-roles`, seed admin) | Solo **desarrollo / demos**; **no** es el modelo de cuentas del piloto |
 | Roster piloto | Emails/roles/grado **sin** contraseñas; MONTI no importa ni guarda claves del colegio |
 | Producción restante | PostgreSQL + RLS + HTTPS (aún pendiente) |
+
 
 ---
 
@@ -155,9 +158,10 @@ En el aula, eso permite **acompañar, guiar y evaluar en paralelo** a muchos est
 | `specs/002-alcance-mvp-y-reconciliacion-perfil/plan.md` | Plan de implementación documental |
 | `specs/001-school-auth-roles/` | Auth local (prototipo) |
 | `specs/005-google-workspace-login/` | Login Google Workspace + roster |
-| `docs/runbook-google-workspace.md` | Operación OAuth / Supabase / dominio |
+| `docs/runbook-google-workspace.md` | Operación OAuth / Firebase / dominio |
 | `docs/validacion.md` | Checklist hito 1 / recorrido PhET |
 | `docs/validacion-auth-001.md` | Evidencia quickstart auth local |
 | `docs/validacion-google-005.md` | Evidencia quickstart Google (`005`) |
+
 | `README.md` | Estado del hito de código |
 | `docs/Perfil Tesis.docx` / Propuesta Técnica MVP | Fuentes reconciliadas aquí |

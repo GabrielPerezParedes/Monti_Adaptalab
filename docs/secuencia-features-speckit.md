@@ -103,37 +103,37 @@ Oleada F  Piloto, carga y defensa
 
 | | |
 |---|---|
-| **Estado** | `puerta` |
+| **Estado** | `hecho` (2026-10-25) — doc canónico [`docs/alcance-mvp.md`](./alcance-mvp.md); carpeta Speckit `specs/002-alcance-mvp-y-reconciliacion-perfil/` |
 | **Tipo** | Spec + decisiones (poca o nula UI) |
 | **Objetivo** | Documento de alcance MVP que reconcilia Perfil ↔ Propuesta ↔ Constitución ↔ código 1.1.0 |
 | **Entrega** | Spec aprobada: tema único, exclusiones, mapa objetivos→features, lista de aclaraciones §3 con dueño (autor / profesora / tutor) |
 | **Bloquea a** | 002+ |
-| **Comando** | `/speckit-specify` luego `/speckit-clarify` si quedan huecos |
-| **Criterio de cierre** | Ninguna contradicción abierta sobre tema, motor, rúbrica ni auth; exclusiones explícitas (Phaser, electromagnetismo, auto-dificultad) |
+| **Comando** | Cerrado; siguiente: `/speckit-specify` para cierre visual (`003-cierre-integracion-tecnica-visual` en el repo) |
+| **Criterio de cierre** | Ninguna contradicción abierta sobre tema, motor, rúbrica ni auth; exclusiones explícitas (Phaser, electromagnetismo, auto-dificultad) — **cumplido** en `alcance-mvp.md` |
 
 #### `002-cierre-integracion-tecnica-visual`
 
 | | |
 |---|---|
-| **Estado** | `parcial` (API/puente/física ya existen; falta recorrido visual completo) |
+| **Estado** | `hecho` (2026-10-25) — carpeta Speckit `specs/003-cierre-integracion-tecnica-visual/`; evidencia en [`docs/validacion.md`](./validacion.md) |
 | **Objetivo** | Cerrar hito 1: recorrido manual de `docs/validacion.md` con PhET real en navegador |
 | **Entrega** | Checklist ejecutado (espera→publicar→explorar→evaluar→entregar→revisar→exportar); bugs de integración corregidos; evidencia en `docs/validacion.md` |
 | **Depende de** | 001 |
 | **Bloquea a** | 003, 012 |
-| **Comando** | `/speckit-specify` |
-| **Criterio de cierre** | Los 7 pasos del recorrido manual pasan en al menos un navegador de referencia; `npm run build`, `test:bridge`, `test:voice`, `pytest` en verde |
+| **Comando** | Cerrado; siguiente puerta: rúbrica docente (`003` canónico) |
+| **Criterio de cierre** | Los 7 pasos del recorrido manual pasan en al menos un navegador de referencia; `npm run build`, `test:bridge`, `test:voice`, `pytest` en verde — **cumplido** |
 
 #### `003-validacion-docente-rubrica-y-politica`
 
 | | |
 |---|---|
-| **Estado** | `puerta` |
+| **Estado** | `hecho` (carpeta repo `specs/004-validacion-docente-rubrica-y-politica/`) |
 | **Objetivo** | Convertir `45-v1-draft` y `attempt_policy draft-1` en versiones **aceptadas** por la profesora |
-| **Entrega** | Acta/spec con: descriptores 0/50/100 %, ejemplos de explicación aceptable/rechazable, tolerancia ±0,5 m, `E(n)`, tratamiento de fallos técnicos; bump de `rubric_version` / `attempt_policy.version` en LabSpec |
+| **Entrega** | Acta cerrada (`docs/acta-rubrica-profesora.md`): descriptores 0/50/100 %, ejemplos, ± ±0,5 m, `E(n)`, fallos técnicos; LabSpec `45-v1` / política `1.0`; informe MONTI para carga a registros |
 | **Depende de** | 001, 002 |
 | **Bloquea a** | 007, 008, 009, 011, 013 |
-| **Comando** | `/speckit-specify` (+ checklist `/speckit-checklist`) |
-| **Criterio de cierre** | Firma/confirmación docente; código usa versiones no-`draft` o documenta excepción temporal explícita |
+| **Comando** | Cerrado |
+| **Criterio de cierre** | Confirmación docente + código no-`draft` — **cumplido** 2026-10-26 |
 
 ---
 
@@ -143,14 +143,16 @@ Oleada F  Piloto, carga y defensa
 
 | | |
 |---|---|
-| **Estado** | `parcial` — slice **local** (`specs/001-school-auth-roles`) + **IdP Google** (`specs/005-google-workspace-login`: Supabase Auth Google + roster sin contraseñas). Falta Postgres de producción, RLS e HTTPS de aula |
+| **Estado** | `parcial` — slice **local** (`specs/001-school-auth-roles`) + **IdP Google** (`specs/005-google-workspace-login`: Firebase Auth Google + roster sin contraseñas). Falta Postgres de producción, RLS e HTTPS de aula |
+
 | **Objetivo** | Sustituir clave docente de desarrollo y SQLite local por identidad escolar |
 | **Entrega** | Supabase Auth; roles docente/estudiante; PostgreSQL; migraciones; RLS por curso; HTTPS en entorno piloto; retiro de `MONTI_DEV_TEACHER_KEY` del flujo de aula |
-| **Depende de** | 001 |
+| **Depende de** | 001 (alcance) |
 | **Bloquea a** | 005, 006, 012, 013 |
-| **Comando** | `/speckit-specify` |
+| **Comando** | `/speckit-specify` (nueva feature; **no** reabrir `001-school-auth-roles` salvo bugs) |
 | **Criterio de cierre** | Estudiante no ve borradores ni intentos ajenos; docente solo su curso; health/mode ya no es solo `local-prototype` para el despliegue piloto |
 | **Speckit ya implementado** | `specs/001-school-auth-roles/` + `specs/005-google-workspace-login/` — `docs/validacion-auth-001.md`, `docs/validacion-google-005.md`, `docs/runbook-google-workspace.md` |
+
 
 #### `005-modelo-datos-academico-y-auditoria`
 
@@ -323,7 +325,7 @@ Tratar como **plataforma existente** al escribir specs nuevas. Extender; no rein
 | Prompts por reglas | `/prompt` | 008 |
 | Voz navegador + compañero provisional | `voice.ts`, `MontiCompanion.tsx` | 010 |
 | Export `.txt` | reportes API | 011 |
-| SQLite local + teacher key | `database.py` | 004 |
+| SQLite local + teacher key | `database.py` | 004 (slice local ya en `001-school-auth-roles`; falta Supabase) |
 
 ---
 
@@ -372,9 +374,10 @@ Para **cada** ID `00N-…`:
 
 > **Numeración del repo vs backlog canónico.** `specs/001-school-auth-roles/` = slice local Oleada B. `specs/002-alcance-mvp-…` = ítem canónico alcance (**hecho** → [`alcance-mvp.md`](./alcance-mvp.md)).
 
-1. **Hecho:** auth local + alcance MVP + cierre visual + **login Google Workspace** (`specs/005-google-workspace-login/`).
-2. **Siguiente:** resto Oleada B (Postgres/RLS/HTTPS); OAuth real 1–2 cuentas vía runbook; merge de `004` (rúbrica) si aún abierto.
+1. **Hecho:** auth local + alcance MVP + cierre visual + **rúbrica `45-v1`** + **login Google Workspace** (`specs/005-google-workspace-login/`).
+2. **Siguiente:** resto Oleada B (Postgres/RLS/HTTPS); OAuth real residual vía runbook.
 3. No abrir RAG (`006+` canónico) hasta haber podido entrar con cuenta institucional en demo.
+
 
 Ver guía operativa: `docs/continuar-speckit.md`.
 
@@ -392,7 +395,8 @@ Ver guía operativa: `docs/continuar-speckit.md`.
 | `docs/validacion.md` | Checklist técnico del hito 1 |
 | `docs/validacion-auth-001.md` | Cierre quickstart auth local (`001-school-auth-roles`) |
 | `docs/validacion-google-005.md` | Cierre quickstart Google Workspace (`005`) |
-| `docs/runbook-google-workspace.md` | Operación OAuth Google + Supabase + roster |
+| `docs/runbook-google-workspace.md` | Operación OAuth Google + Firebase + roster |
+
 | `docs/continuar-speckit.md` | Guía operativa: qué Speckit ejecutar ahora |
 | `docs/alcance-mvp.md` | Alcance técnico canónico del MVP |
 | `README.md` | Estado real 1.1.0 |

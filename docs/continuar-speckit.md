@@ -1,6 +1,6 @@
 # Continuar con Speckit — guía operativa
 
-**Actualizado**: 2026-11-04  
+**Actualizado**: 2026-11-05  
 **Estado**: auth local + alcance + cierre visual + rúbrica `45-v1` + **login Google Workspace (`005`)** hechos. Residual: OAuth real en navegador (runbook). No reabrir rúbrica ni `001` salvo bugs.
 
 ## Mapa rápido (canónico → carpeta en este repo)
@@ -46,12 +46,12 @@ Acta: [`docs/acta-rubrica-profesora.md`](./acta-rubrica-profesora.md). Versiones
 - Evidencia: [`docs/validacion-google-005.md`](./validacion-google-005.md)
 - Dominio `montessorisucre.edu.bo` · roster **sin** contraseñas · auth local `001` sigue para demos
 
-**Siguiente:** skill `nueva-rama` para PR de `005`, o siguiente feature (Postgres/RLS / modelo académico) cuando toque. No abrir RAG hasta identidad de aula usable en demo.
+**Siguiente:** merge del PR `005` si aún abierto, o siguiente feature (Postgres/RLS / modelo académico) cuando toque. No abrir RAG hasta identidad de aula usable en demo.
 
 ## Qué no abrir todavía
 
 - Importar contraseñas del colegio  
-- Corpus RAG / tutor LLM hasta haber probado OAuth real 1–2 cuentas  
+- Corpus RAG / tutor LLM / voz generativa hasta haber probado OAuth real 1–2 cuentas  
 - Concurrencia 30 / piloto formal completo  
 
 ## Comandos locales útiles

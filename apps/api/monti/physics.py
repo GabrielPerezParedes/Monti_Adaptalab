@@ -14,6 +14,12 @@ def solve(state: LaunchState) -> dict:
     }
 
 def efficiency(penalized_runs: int) -> float:
+    """Legacy alias for learning_evidence_score (E(n))."""
+    return learning_evidence_score(penalized_runs)
+
+
+def learning_evidence_score(penalized_runs: int) -> float:
+    """E(n) = max(0, 4 − 0.25 n(n + 1)) for Evidencia de aprendizaje."""
     if penalized_runs < 0:
         raise ValueError('Attempt count must be nonnegative.')
     return max(0.0, 4 - .25 * penalized_runs * (penalized_runs + 1))
